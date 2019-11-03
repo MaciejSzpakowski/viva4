@@ -1,6 +1,6 @@
 #include "viva.h"
 
-vi::graphics::transform t[10000];
+vi::graphics::drawInfo t[10000];
 
 int main()
 {
@@ -17,9 +17,12 @@ int main()
 	vi::graphics::graphicsInit(&g, &info);
     vi::graphics::initCamera(&g, &cam);
     cam.scale = 0.1f;
-    vi::graphics::texture t1;
-    vi::graphics::createTexture(&g, "a.png", &h, &t1);
-    vi::graphics::pushTextures(&g, &t1, 1);
+    vi::graphics::texture tex[2];
+    vi::graphics::createTexture(&g, "a.png", tex);
+    vi::graphics::texture t2;
+    vi::graphics::createTexture(&g, "b.png", tex + 1);
+
+    vi::graphics::pushTextures(&g, tex, 2);
 
     vkQueueWaitIdle(g.queue);
 
@@ -30,6 +33,7 @@ int main()
     t[0].rot = 0;
     t[0].sx = 5;
     t[0].sy = 5;
+    t[0].textureIndex = tex[0].index;
 
     t[1] = {};
     t[1].x = 0.5f;
@@ -37,10 +41,8 @@ int main()
     t[1].z = 0.02f;
     t[1].sx = 5;
     t[1].sy = 5;
-
-    vi::graphics::destroyTexture(&g, &t1);
-    vi::graphics::graphicsDestroy(&g);
-
+    t[1].textureIndex = tex[1].index;
+    
     vi::system::loop([&]()
     {
         vi::input::updateKeyboardState(&k);
@@ -76,9 +78,13 @@ int main()
         }
 
         vi::graphics::beginScene(&g);
-        vi::graphics::draw(&g, &t1, t, 2, &cam);
+        vi::graphics::draw(&g, t, 2, &cam);
         vi::graphics::endScene(&g);
     });
+
+    vi::graphics::destroyTexture(&g, tex);
+    vi::graphics::destroyTexture(&g, tex + 1);
+    vi::graphics::graphicsDestroy(&g);
 
 	return 0;
 }

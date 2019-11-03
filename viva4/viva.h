@@ -224,8 +224,9 @@ namespace vi::graphics
 	};
 
     // struct passed to uniform buffer must be multiple of 16bytes
-    struct transform
+    struct drawInfo
     {
+        // transform
         float x;
         float y;
         float z;
@@ -234,6 +235,15 @@ namespace vi::graphics
         float rot;
         float ox;
         float oy;
+        // uv, color, texture
+        int textureIndex;
+        float left;
+        float top;
+        float right;
+        float bottom;
+        float r;
+        float g;
+        float b;
     };
 
     struct texture
@@ -1520,7 +1530,7 @@ namespace vi::graphics
         result->memory = textureImageMemory;
     }
 
-    void createTexture(engine* g, const char* filename, memory::heap* h, texture* result)
+    void createTexture(engine* g, const char* filename, texture* result)
     {
         int x = -1, y = -1, n = -1;
         const int components = 4; // components means how many elements from 'RGBA'
@@ -1546,7 +1556,7 @@ namespace vi::graphics
         vkFreeMemory(g->device, t->memory, nullptr);
     }
 
-    void draw(engine* g, texture* tex, transform* t, uint instances, camera* c)
+    void draw(engine* g, drawInfo* t, uint instances, camera* c)
     {
         VkDrawIndirectCommand drawParams;
         drawParams.firstInstance = 0;
@@ -1562,7 +1572,7 @@ namespace vi::graphics
         void* mappedUniformBufferMemory = nullptr;
         vkMapMemory(g->device, g->uniformBufferMemory, 0, UNIFORM_BUFFER_SIZE, 0, &mappedUniformBufferMemory);
         memcpy(mappedUniformBufferMemory, c, sizeof(camera));
-        memcpy((byte*)mappedUniformBufferMemory + sizeof(camera), t, sizeof(transform) * instances);
+        memcpy((byte*)mappedUniformBufferMemory + sizeof(camera), t, sizeof(drawInfo) * instances);
         vkUnmapMemory(g->device, g->uniformBufferMemory);
 
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -1604,6 +1614,7 @@ namespace vi::graphics
 
         for (uint i = 0; i < count; i++)
         {
+            textures[i].index = i;
             descriptorImageInfo[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             descriptorImageInfo[i].imageView = textures[i].imageView;
         }

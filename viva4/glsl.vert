@@ -12,6 +12,14 @@ struct transform
 	float rot;
 	float ox;
 	float oy;
+	int textureInstance;
+	float left;
+	float top;
+	float right;
+	float bottom;
+	float r;
+	float g;
+	float b;
 };
 
 struct camera
@@ -38,6 +46,7 @@ vec2 vertices[8] = vec2[](
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
+layout(location = 2) out int textureIndex;
 
 void main() {
 	float width = 800;
@@ -76,11 +85,11 @@ void main() {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
-		t.x, t.y, 0, 1
+		t.x, t.y, 0, 1 // z from transform is not put over here because it's on the vertex itself
 	);
 	vec4 v = vec4(vertices[gl_VertexIndex * 2].x, vertices[gl_VertexIndex * 2].y,  ubo.t[gl_InstanceIndex].z, 1.0);
 	gl_Position = m1 * m5 * m3 * m4 * m2 * v;
-    //gl_Position = vec4(vertices[gl_VertexIndex * 2].x + ubo.t[gl_InstanceIndex].x, vertices[gl_VertexIndex * 2].y + ubo.t[gl_InstanceIndex].y,  ubo.t[gl_InstanceIndex].z, 1.0);
     fragColor = vec3(1.0,1.0,1.0);
 	fragTexCoord = vec2(vertices[gl_VertexIndex * 2 + 1].x, vertices[gl_VertexIndex * 2 + 1].y);
+	textureIndex = t.textureInstance;
 }
