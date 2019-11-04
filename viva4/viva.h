@@ -1,4 +1,7 @@
 #pragma once
+
+// Viva engine by Maciej Szpakowski
+
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -107,6 +110,64 @@ namespace vi::memory
 	}
 }
 
+namespace vi::time
+{
+    struct timer
+    {
+        float gameTime;
+        float frameTime;
+        long long ticksPerSecond;
+        long long startTime;
+        long long prevTick;
+    };
+
+    void initTimer(timer* t)
+    {
+        t->gameTime = 0;
+        t->frameTime = 0;
+        LARGE_INTEGER li;
+        BOOL result = ::QueryPerformanceFrequency(&li);
+
+#ifdef VIDBG
+        if (!result)
+        {
+            fprintf(stderr, "QueryPerformanceFrequency failed");
+            exit(1);
+        }
+#endif
+
+        t->ticksPerSecond = li.QuadPart;
+        ::QueryPerformanceCounter(&li);
+        t->startTime = li.QuadPart;
+        t->prevTick = li.QuadPart;
+    }
+
+    // this updates the timer so it must be called once per frame
+    void updateTimer(timer* t)
+    {
+        LARGE_INTEGER currentTime;
+        ::QueryPerformanceCounter(&currentTime);
+
+        long long frameDelta = currentTime.QuadPart - t->prevTick;
+        long long gameDelta = currentTime.QuadPart - t->startTime;
+        t->prevTick = currentTime.QuadPart;
+        t->frameTime = (float)((double)frameDelta / (double)t->ticksPerSecond);
+        t->gameTime = (float)((double)gameDelta / (double)t->ticksPerSecond);
+    }
+
+    // get frame time in seconds
+    float getFrameTimeSec(timer* t)
+    {
+        return t->frameTime;
+    }
+
+    // get time since game started in seconds
+    float getGameTimeSec(timer* t)
+    {
+        return t->gameTime;
+    }
+}
+
 namespace vi::util
 {
 	size_t getFileSize(FILE* file)
@@ -163,7 +224,12 @@ namespace vi::util
 
 namespace vi::math
 {
-
+    const float PI = 3.1415926f;
+    const float TWO_PI = PI * 2;
+    const float HALF_PI = PI / 2;
+    const float THIRD_PI = PI / 3;
+    const float FORTH_PI = PI / 4;
+    const float DEGREE = PI / 180;
 }
 
 // win32vk
@@ -1696,6 +1762,9 @@ namespace vi::graphics
             }
 #endif
         }
+
+        // i'm not sure if this is needed
+        vkQueueWaitIdle(g->queue);
     }
 
     // if returned false skip drawing for this frame, you are fine otherwise
@@ -1814,4 +1883,25 @@ namespace vi::system
             activity();
 		}
 	}
+}
+
+namespace vi
+{
+    struct viva
+    {
+        input::keyboard keyboard;
+        graphics::engine graphics;
+        graphics::camera camera;
+        memory::heap heap;
+        time::timer timer;
+    };
+
+    void initViva(viva* v, graphics::engineInfo* info)
+    {
+        input::initKeyboard(&v->keyboard);
+        memory::heapInit(&v->heap);
+        graphics::graphicsInit(&v->graphics, info);
+        graphics::initCamera(&v->graphics, &v->camera);
+        time::initTimer(&v->timer);
+    }
 }

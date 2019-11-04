@@ -11,7 +11,7 @@ layout(binding = 1) uniform sampler texSampler;
 layout(binding = 2) uniform texture2D sampledImage[40];
 
 void main() {
-    outColor = texture(sampler2D(sampledImage[textureIndex],texSampler), fragTexCoord);
+	outColor = texture(sampler2D(sampledImage[textureIndex],texSampler), fragTexCoord);		
 	if(outColor.a == 0)
 		discard;
 }

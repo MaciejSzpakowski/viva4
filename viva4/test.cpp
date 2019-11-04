@@ -4,50 +4,55 @@ vi::graphics::drawInfo t[10000];
 
 int main()
 {
-    vi::input::keyboard k;
-    vi::input::initKeyboard(&k);
 	vi::graphics::engineInfo info;
-	vi::graphics::engine g;
-    vi::graphics::camera cam;
-    vi::memory::heap h;
-    vi::memory::heapInit(&h);
 	info.width = 800;
 	info.height = 600;
 	info.title = "Viva4!";
-	vi::graphics::graphicsInit(&g, &info);
-    vi::graphics::initCamera(&g, &cam);
-    cam.scale = 0.1f;
-    vi::graphics::texture tex[2];
-    vi::graphics::createTexture(&g, "a.png", tex);
-    vi::graphics::texture t2;
-    vi::graphics::createTexture(&g, "b.png", tex + 1);
+    vi::viva v;
+    vi::initViva(&v, &info);
+    v.camera.scale = 0.1f;
 
-    vi::graphics::pushTextures(&g, tex, 2);
+    vi::graphics::texture tex[3];
+    vi::graphics::createTexture(&v.graphics, "bk.png", tex);
+    vi::graphics::createTexture(&v.graphics, "sm.png", tex + 1);
+    vi::graphics::createTexture(&v.graphics, "elf.png", tex + 2);
 
-    vkQueueWaitIdle(g.queue);
+    vi::graphics::pushTextures(&v.graphics, tex, 3);
 
     t[0] = {};
-    t[0].x = 0;
-    t[0].y = 0;
-    t[0].z = 0.01f;
-    t[0].rot = 0;
-    t[0].sx = 5;
-    t[0].sy = 5;
-    t[0].textureIndex = tex[0].index;
+    t[0].sx = 3;
+    t[0].sy = 3;
+    t[0].textureIndex = 0;
 
     t[1] = {};
-    t[1].x = 0.5f;
-    t[1].y = 0.5f;
-    t[1].z = 0.02f;
-    t[1].sx = 5;
-    t[1].sy = 5;
-    t[1].textureIndex = tex[1].index;
+    t[1].sx = 3;
+    t[1].sy = 3;
+    t[1].textureIndex = 1;
+
+    t[2] = {};
+    t[2].sx = 3;
+    t[2].sy = 3;
+    t[2].textureIndex = 2;
     
     vi::system::loop([&]()
     {
-        vi::input::updateKeyboardState(&k);
+        vi::input::updateKeyboardState(&v.keyboard);
+        vi::time::updateTimer(&v.timer);
 
-        if (vi::input::isKeyPressed(&k, 'A'))
+        float gameTime = vi::time::getGameTimeSec(&v.timer);
+        t[0].x = sinf(gameTime) * 3;
+        t[0].y = cosf(gameTime) * 3;
+        //t[0].rot = gameTime;
+
+        t[1].x = sinf(gameTime + vi::math::PI * 2 / 3) * 3;
+        t[1].y = cosf(gameTime + vi::math::PI * 2 / 3) * 3;
+        //t[1].rot = gameTime + vi::math::TWO_PI / 3;
+
+        t[2].x = sinf(gameTime + vi::math::PI * 4 / 3) * 3;
+        t[2].y = cosf(gameTime + vi::math::PI * 4 / 3) * 3;
+        //t[2].rot = gameTime + vi::math::TWO_PI / 3 * 2;
+
+        /*if (vi::input::isKeyPressed(&k, 'A'))
             t[0].x--;
 
         if (vi::input::isKeyPressed(&k, 'D'))
@@ -75,16 +80,17 @@ int main()
         {
             t[0].sx += 0.5f;
             t[0].sy += 0.5f;
-        }
+        }*/
 
-        vi::graphics::beginScene(&g);
-        vi::graphics::draw(&g, t, 2, &cam);
-        vi::graphics::endScene(&g);
+        vi::graphics::beginScene(&v.graphics);
+        vi::graphics::draw(&v.graphics, t, 3, &v.camera);
+        vi::graphics::endScene(&v.graphics);
     });
 
-    vi::graphics::destroyTexture(&g, tex);
-    vi::graphics::destroyTexture(&g, tex + 1);
-    vi::graphics::graphicsDestroy(&g);
+    vi::graphics::destroyTexture(&v.graphics, tex);
+    vi::graphics::destroyTexture(&v.graphics, tex + 1);
+    vi::graphics::destroyTexture(&v.graphics, tex + 2);
+    vi::graphics::graphicsDestroy(&v.graphics);
 
 	return 0;
 }

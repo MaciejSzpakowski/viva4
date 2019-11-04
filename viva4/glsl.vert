@@ -46,7 +46,7 @@ vec2 vertices[8] = vec2[](
 
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) out int textureIndex;
+layout(location = 2) out flat int textureIndex;
 
 void main() {
 	float width = 800;
@@ -89,7 +89,7 @@ void main() {
 	);
 	vec4 v = vec4(vertices[gl_VertexIndex * 2].x, vertices[gl_VertexIndex * 2].y,  ubo.t[gl_InstanceIndex].z, 1.0);
 	gl_Position = m1 * m5 * m3 * m4 * m2 * v;
-    fragColor = vec3(1.0,1.0,1.0);
+	fragColor = vec3(0,0,1);		
 	fragTexCoord = vec2(vertices[gl_VertexIndex * 2 + 1].x, vertices[gl_VertexIndex * 2 + 1].y);
 	textureIndex = t.textureInstance;
 }
