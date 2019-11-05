@@ -23,16 +23,19 @@ int main()
     t[0].sx = 3;
     t[0].sy = 3;
     t[0].textureIndex = 0;
+    t[0].r = 0;
 
     t[1] = {};
     t[1].sx = 3;
     t[1].sy = 3;
     t[1].textureIndex = 1;
+    t[1].r = 1;
 
     t[2] = {};
     t[2].sx = 3;
     t[2].sy = 3;
     t[2].textureIndex = 2;
+    t[2].r = 2;
     
     vi::system::loop([&]()
     {

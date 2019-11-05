@@ -89,7 +89,7 @@ void main() {
 	);
 	vec4 v = vec4(vertices[gl_VertexIndex * 2].x, vertices[gl_VertexIndex * 2].y,  ubo.t[gl_InstanceIndex].z, 1.0);
 	gl_Position = m1 * m5 * m3 * m4 * m2 * v;
-	fragColor = vec3(0,0,1);		
+	fragColor = vec3(t.r,t.g,t.b);		
 	fragTexCoord = vec2(vertices[gl_VertexIndex * 2 + 1].x, vertices[gl_VertexIndex * 2 + 1].y);
 	textureIndex = t.textureInstance;
 }

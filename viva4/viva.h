@@ -572,7 +572,7 @@ namespace vi::graphics
 		vkEnumeratePhysicalDevices(g->instance, &gpuCount, nullptr);
 		gpuCount = min(10, gpuCount);
 		vkEnumeratePhysicalDevices(g->instance, &gpuCount, gpus);
-
+        
 		for (uint32_t i = 0; i < gpuCount; i++)
 		{
 			vkGetPhysicalDeviceProperties(gpus[i], &gpuProperties);
@@ -635,6 +635,12 @@ namespace vi::graphics
 			exit(1);
 		}
 #endif
+
+        // you can use that to see max texture size and layers
+        VkImageFormatProperties imageFormatProperties;
+        vkGetPhysicalDeviceImageFormatProperties(physicalDevice, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TYPE_2D,
+            VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+            0, &imageFormatProperties);
 
 		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &g->memProperties);
 
