@@ -659,13 +659,13 @@ namespace vi::graphics
 
 		VkPhysicalDeviceFeatures deviceFeatures = {};
 
-		const char* extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+		const char* extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,"VK_KHR_get_physical_device_properties2", "VK_KHR_maintenance3" };
 		VkDeviceCreateInfo deviceArgs = {};
 		deviceArgs.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 		deviceArgs.pQueueCreateInfos = &queueArgs;
 		deviceArgs.queueCreateInfoCount = 1;
 		deviceArgs.pEnabledFeatures = &deviceFeatures;
-		deviceArgs.enabledExtensionCount = 1;
+		deviceArgs.enabledExtensionCount = 4;
 		deviceArgs.ppEnabledExtensionNames = extensions;
 
 		// create device creates logical device and all the queues
