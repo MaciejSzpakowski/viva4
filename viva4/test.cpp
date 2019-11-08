@@ -4,7 +4,7 @@ vi::graphics::drawInfo t[10000];
 
 int main()
 {
-	vi::graphics::engineInfo info;
+	vi::vivaInfo info;
 	info.width = 800;
 	info.height = 600;
 	info.title = "Viva4!";

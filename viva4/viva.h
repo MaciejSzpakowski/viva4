@@ -232,6 +232,106 @@ namespace vi::math
     const float DEGREE = PI / 180;
 }
 
+namespace vi::system
+{
+    LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+    {
+        switch (uMsg)
+        {
+        case WM_SYSKEYDOWN:
+        {
+            if (wParam == VK_MENU)//ignore left alt stop
+            {
+            }
+            else
+                return DefWindowProc(hwnd, uMsg, wParam, lParam); // this makes ALT+F4 work
+            break;
+        }
+        case WM_CLOSE:
+        {
+            PostQuitMessage(0);
+            break;
+        }
+        default:
+            return DefWindowProc(hwnd, uMsg, wParam, lParam);
+        }
+
+        return 0;
+    }
+
+    struct windowInfo
+    {
+        uint height;
+        uint width;
+        const char* title;
+    };
+
+    struct window
+    {
+        HWND handle;
+        HINSTANCE hinstance;
+        uint height;
+        uint width;
+    };
+
+    void initWindow(windowInfo* info, window* w)
+    {
+        w->width = info->width;
+        w->height = info->height;
+        w->hinstance = GetModuleHandle(0);
+        HBRUSH bg = CreateSolidBrush(RGB(255, 0, 0));
+
+        WNDCLASS wc = { };
+        ZeroMemory(&wc, sizeof(WNDCLASS));
+        wc.lpfnWndProc = WindowProc;
+        wc.hInstance = w->hinstance;
+        wc.lpszClassName = WND_CLASSNAME;
+        wc.hbrBackground = bg;
+        RegisterClass(&wc);
+
+        DWORD wndStyle = WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX;
+        RECT r = { 0, 0, (LONG)info->width, (LONG)info->height };
+        // this tells you what should be the window size if r is rect for client
+        // IMPORTANT. window client, swap chain and VkImages (render target) dimensions must match
+        AdjustWindowRect(&r, wndStyle, false);
+        w->handle = CreateWindowEx(0, WND_CLASSNAME, info->title, wndStyle, 100, 100,
+            r.right - r.left, r.bottom - r.top, 0, 0, w->hinstance, 0);
+#ifdef VIDBG
+        if (w->handle == nullptr)
+        {
+            fprintf(stderr, "Failed to create window");
+            exit(1);
+        }
+#endif
+        ShowWindow(w->handle, SW_SHOW);
+    }
+
+    void destroyWindow(window* w)
+    {
+        DestroyWindow(w->handle);
+        UnregisterClass(WND_CLASSNAME, w->hinstance);
+    }
+
+    void loop(std::function<void()> activity)
+    {
+        MSG msg;
+
+        while (true)
+        {
+            while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+
+            if (msg.message == WM_QUIT)
+                break;
+
+            activity();
+        }
+    }
+}
+
 // win32vk
 namespace vi::graphics
 {
@@ -245,10 +345,13 @@ namespace vi::graphics
         byte padding[12];
     };
 
-	struct engine
+    struct rendererInfo
+    {
+        system::window* wnd;
+    };
+
+	struct renderer
 	{
-		HINSTANCE hinstance;
-		HWND window;
         VkInstance instance;
         VkDevice device;
         VkPhysicalDeviceMemoryProperties memProperties;
@@ -280,13 +383,6 @@ namespace vi::graphics
         VkDescriptorSetLayout descriptorSetLayout;
         VkSampler textureSampler;
         VkDescriptorPool descriptorPool;
-	};
-
-	struct engineInfo
-	{
-		uint width;
-		uint height;
-		const char* title;
 	};
 
     // struct passed to uniform buffer must be multiple of 16bytes
@@ -321,63 +417,6 @@ namespace vi::graphics
         VkImageView imageView;
         VkDeviceMemory memory;
     };
-
-	LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
-	{
-		switch (uMsg)
-		{
-        case WM_SYSKEYDOWN:
-        {
-            if (wParam == VK_MENU)//ignore left alt stop
-            {
-            }
-            else
-                return DefWindowProc(hwnd, uMsg, wParam, lParam); // this makes ALT+F4 work
-            break;
-        }
-		case WM_CLOSE:
-		{
-			PostQuitMessage(0);
-			break;
-		}
-		default:
-			return DefWindowProc(hwnd, uMsg, wParam, lParam);
-		}
-
-		return 0;
-	}
-
-	void _win32InitWindow(engine* g, engineInfo* info)
-	{
-		g->hinstance = GetModuleHandle(0);
-		HBRUSH bg = CreateSolidBrush(RGB(255, 0, 0));
-		uint32_t width = info->width;
-		uint32_t height = info->height;
-
-		WNDCLASS wc = { };
-		ZeroMemory(&wc, sizeof(WNDCLASS));
-		wc.lpfnWndProc = WindowProc;
-		wc.hInstance = g->hinstance;
-		wc.lpszClassName = WND_CLASSNAME;
-		wc.hbrBackground = bg;
-		RegisterClass(&wc);
-
-		DWORD wndStyle = WS_SYSMENU | WS_CAPTION | WS_MINIMIZEBOX;
-		RECT r = { 0, 0, (LONG)width, (LONG)height };
-		// this tells you what should be the window size if r is rect for client
-		// IMPORTANT. window client, swap chain and VkImages (render target) dimensions must match
-		AdjustWindowRect(&r, wndStyle, false);
-		g->window = CreateWindowEx(0, WND_CLASSNAME, info->title, wndStyle, 100, 100,
-			r.right - r.left, r.bottom - r.top, 0, 0, g->hinstance, 0);
-#ifdef VIDBG
-		if (g->window == nullptr)
-		{
-			fprintf(stderr, "Failed to create window");
-			exit(1);
-		}
-#endif
-		ShowWindow(g->window, SW_SHOW);
-	}
 
 	void _vkCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkDevice device, VkBuffer* buffer,
 		VkMemoryPropertyFlags memoryFlags, VkPhysicalDeviceMemoryProperties memProperties, VkDeviceMemory* bufferMemory)
@@ -506,7 +545,7 @@ namespace vi::graphics
         vkBindImageMemory(device, *image, *imageMemory, 0);
     }
 
-	void _vkInitStep1(engine* g, engineInfo* info)
+	void _vkInitStep1(rendererInfo* info, renderer* g)
 	{
 		memory::heap helperHeap;
 		memory::heapInit(&helperHeap);
@@ -530,13 +569,13 @@ namespace vi::graphics
 		appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 		appInfo.apiVersion = VK_API_VERSION_1_0;
 
-		const char* ext[] = { "VK_KHR_surface", "VK_KHR_win32_surface" };
+		const char* ext[] = { "VK_KHR_surface", "VK_KHR_win32_surface", "VK_KHR_get_physical_device_properties2" };
 		const char* layers[] = { "VK_LAYER_KHRONOS_validation" };
 
 		VkInstanceCreateInfo vkInstanceArgs = {};
 		vkInstanceArgs.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		vkInstanceArgs.pApplicationInfo = &appInfo;
-		vkInstanceArgs.enabledExtensionCount = 2;
+		vkInstanceArgs.enabledExtensionCount = 3;
 		vkInstanceArgs.ppEnabledExtensionNames = ext;
 
 		// enable this to see some diagnostic
@@ -657,15 +696,19 @@ namespace vi::graphics
 		queueArgs.queueCount = 1;
 		queueArgs.pQueuePriorities = &queuePriority;
 
+        VkPhysicalDeviceDescriptorIndexingFeaturesEXT deviceFeaturesDescriptorIndexing = {};
+        deviceFeaturesDescriptorIndexing.shaderSampledImageArrayNonUniformIndexing = true;
+
 		VkPhysicalDeviceFeatures deviceFeatures = {};
 
-		const char* extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,"VK_KHR_get_physical_device_properties2", "VK_KHR_maintenance3" };
+		const char* extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME, "VK_KHR_maintenance3" };
 		VkDeviceCreateInfo deviceArgs = {};
 		deviceArgs.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        deviceArgs.pNext = &deviceFeaturesDescriptorIndexing;
 		deviceArgs.pQueueCreateInfos = &queueArgs;
 		deviceArgs.queueCreateInfoCount = 1;
 		deviceArgs.pEnabledFeatures = &deviceFeatures;
-		deviceArgs.enabledExtensionCount = 4;
+		deviceArgs.enabledExtensionCount = 3;
 		deviceArgs.ppEnabledExtensionNames = extensions;
 
 		// create device creates logical device and all the queues
@@ -707,8 +750,8 @@ namespace vi::graphics
 		*/
 		VkWin32SurfaceCreateInfoKHR surfaceArgs = {};
 		surfaceArgs.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surfaceArgs.hinstance = g->hinstance;
-		surfaceArgs.hwnd = g->window;
+		surfaceArgs.hinstance = info->wnd->hinstance;
+        surfaceArgs.hwnd = info->wnd->handle;
 
 		vkResult = vkCreateWin32SurfaceKHR(g->instance, &surfaceArgs, nullptr, &g->surface);
 
@@ -773,7 +816,7 @@ namespace vi::graphics
 		Creating swapchain with vulkan creates VkImage as well which is actual vulkan object
 		where vulkan renders pixels to
 		*/
-		g->swapChainExtent = { info->width ,info->height };
+		g->swapChainExtent = { info->wnd->width ,info->wnd->height };
 		// recommendation is minimum + 1
 		uint32_t frameBufferCount = surfaceCapabilities.minImageCount + 1;
         g->frameBufferCount = frameBufferCount;
@@ -1386,13 +1429,12 @@ namespace vi::graphics
 		memory::heapClear(&helperHeap);
 	}
 
-	void graphicsInit(engine* g, engineInfo* info)
+	void graphicsInit(rendererInfo* info, renderer* g)
 	{
-		_win32InitWindow(g, info);
-		_vkInitStep1(g, info);
+		_vkInitStep1(info, g);
 	}
 
-	void graphicsDestroy(engine* g)
+	void graphicsDestroy(renderer* g)
 	{
         vkQueueWaitIdle(g->queue);
 
@@ -1424,12 +1466,10 @@ namespace vi::graphics
         vkDestroyCommandPool(g->device, g->commandPool, nullptr);
         vkDestroyDevice(g->device, nullptr);
         vkDestroyInstance(g->instance, nullptr);
-        DestroyWindow(g->window);
-        UnregisterClass(WND_CLASSNAME, g->hinstance);
 	}
 
     // size in bytes of the texture will be 4 * width * height
-    void createTexture(engine* g, byte* data, uint width, uint height, texture* result)
+    void createTexture(renderer* g, byte* data, uint width, uint height, texture* result)
     {
         VkResult vkResult;
 
@@ -1602,7 +1642,7 @@ namespace vi::graphics
         result->memory = textureImageMemory;
     }
 
-    void createTexture(engine* g, const char* filename, texture* result)
+    void createTexture(renderer* g, const char* filename, texture* result)
     {
         int x = -1, y = -1, n = -1;
         const int components = 4; // components means how many elements from 'RGBA'
@@ -1621,14 +1661,14 @@ namespace vi::graphics
         free(data);
     }
 
-    void destroyTexture(engine* g, texture* t)
+    void destroyTexture(renderer* g, texture* t)
     {
         vkDestroyImageView(g->device, t->imageView, nullptr);
         vkDestroyImage(g->device, t->image, nullptr);
         vkFreeMemory(g->device, t->memory, nullptr);
     }
 
-    void draw(engine* g, drawInfo* t, uint instances, camera* c)
+    void draw(renderer* g, drawInfo* t, uint instances, camera* c)
     {
         VkDrawIndirectCommand drawParams;
         drawParams.firstInstance = 0;
@@ -1672,7 +1712,7 @@ namespace vi::graphics
 
     // 1. Have to update descriptor set
     // 2. Have to create draw command
-    void pushTextures(engine* g, texture* textures, uint count)
+    void pushTextures(renderer* g, texture* textures, uint count)
     {
 #ifdef VIDBG
         if (count > 40)
@@ -1774,7 +1814,7 @@ namespace vi::graphics
     }
 
     // if returned false skip drawing for this frame, you are fine otherwise
-    bool beginScene(engine* g)
+    bool beginScene(renderer* g)
     {
         // vkAcquireNextImageKHR returns non success if surface changes (more accurately, if surface is not available for presenting) for example when window is resized or minimalized
         // im only handling minimalization by stoping this draw call
@@ -1782,7 +1822,7 @@ namespace vi::graphics
         return result == VK_SUCCESS;
     }
 
-    void endScene(engine* g)
+    void endScene(renderer* g)
     {
         VkPresentInfoKHR presentInfo = {};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1799,7 +1839,7 @@ namespace vi::graphics
         vkQueueWaitIdle(g->queue);
     }
 
-    void initCamera(engine* g, camera* c)
+    void initCamera(renderer* g, camera* c)
     {
         c->aspectRatio = g->swapChainExtent.width / (float)g->swapChainExtent.height;
         c->rotation = 0;
@@ -1869,44 +1909,39 @@ namespace vi::network
 
 }
 
-namespace vi::system
-{
-	void loop(std::function<void()> activity)
-	{
-		MSG msg;
-
-		while (true)
-		{
-			while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
-			{
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
-			}
-
-			if (msg.message == WM_QUIT)
-				break;
-
-            activity();
-		}
-	}
-}
-
 namespace vi
 {
+    struct vivaInfo
+    {
+        uint width;
+        uint height;
+        const char* title;
+    };
+
     struct viva
     {
         input::keyboard keyboard;
-        graphics::engine graphics;
+        system::window window;
+        graphics::renderer graphics;
         graphics::camera camera;
         memory::heap heap;
         time::timer timer;
     };
 
-    void initViva(viva* v, graphics::engineInfo* info)
+    void initViva(viva* v, vivaInfo* info)
     {
+        system::windowInfo wInfo;
+        wInfo.width = info->width;
+        wInfo.height = info->height;
+        wInfo.title = info->title;
+
+        graphics::rendererInfo rInfo;
+        rInfo.wnd = &v->window;
+
+        system::initWindow(&wInfo, &v->window);
         input::initKeyboard(&v->keyboard);
         memory::heapInit(&v->heap);
-        graphics::graphicsInit(&v->graphics, info);
+        graphics::graphicsInit(&rInfo, &v->graphics);
         graphics::initCamera(&v->graphics, &v->camera);
         time::initTimer(&v->timer);
     }
