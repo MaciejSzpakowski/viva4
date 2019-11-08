@@ -9,10 +9,22 @@ layout(location = 2) in nonuniformEXT flat int textureIndex;
 layout(location = 0) out vec4 outColor;
 
 layout(binding = 1) uniform sampler texSampler;
-layout(binding = 2) uniform texture2D sampledImage[40];
+layout(binding = 2) uniform texture2D sampledImage[256];
 
 void main() {
-	outColor = texture(sampler2D(sampledImage[textureIndex],texSampler), fragTexCoord);
+	if(textureIndex >= 0)
+	{
+		vec4 mask = vec4(fragColor,1);
+		outColor = texture(sampler2D(sampledImage[textureIndex],texSampler), fragTexCoord);
+		outColor.r *= mask.r;
+		outColor.g *= mask.g;
+		outColor.b *= mask.b;
+	}
+	else
+	{
+		outColor = vec4(fragColor,1);
+	}
+		
 	if(outColor.a == 0)
 		discard;
 }

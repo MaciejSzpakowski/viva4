@@ -37,11 +37,11 @@ layout(binding = 0) uniform UniformBufferObject {
 } ubo;
 
 // first column is POS, second is UV
-vec2 vertices[8] = vec2[](
-    vec2(-0.5, -0.5), vec2(0.0, 0.0),
-    vec2(-0.5, 0.5), vec2(0.0, 1.0),
-    vec2(0.5, -0.5), vec2(1.0, 0.0),
-	vec2(0.5, 0.5), vec2(1.0, 1.0)
+vec2 vertices[4] = vec2[](
+    vec2(-0.5, -0.5),
+    vec2(-0.5, 0.5),
+    vec2(0.5, -0.5),
+	vec2(0.5, 0.5)
 );
 
 layout(location = 0) out vec3 fragColor;
@@ -52,6 +52,7 @@ void main() {
 	float width = 800;
 	float height = 600;
 	transform t = ubo.t[gl_InstanceIndex];
+	vec2 uv[4] = vec2[](vec2(t.left, t.top),vec2(t.left, t.bottom),vec2(t.right, t.top),vec2(t.right, t.bottom));
 	// camera
 	mat4 m1 = mat4(
 		1/ubo.cam.aspectRatio * ubo.cam.scale, 0, 0, 0,
@@ -87,9 +88,9 @@ void main() {
 		0, 0, 1, 0,
 		t.x, t.y, 0, 1 // z from transform is not put over here because it's on the vertex itself
 	);
-	vec4 v = vec4(vertices[gl_VertexIndex * 2].x, vertices[gl_VertexIndex * 2].y,  ubo.t[gl_InstanceIndex].z, 1.0);
+	vec4 v = vec4(vertices[gl_VertexIndex].x, vertices[gl_VertexIndex].y,  ubo.t[gl_InstanceIndex].z, 1.0);
 	gl_Position = m1 * m5 * m3 * m4 * m2 * v;
 	fragColor = vec3(t.r,t.g,t.b);		
-	fragTexCoord = vec2(vertices[gl_VertexIndex * 2 + 1].x, vertices[gl_VertexIndex * 2 + 1].y);
+	fragTexCoord = uv[gl_VertexIndex];
 	textureIndex = t.textureInstance;
 }

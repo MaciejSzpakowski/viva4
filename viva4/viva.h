@@ -24,8 +24,9 @@
 #define VIDBG
 #define UNIFORM_BUFFER_SIZE 1024 * 1024
 #define INDIRECT_BUFFER_SIZE sizeof(VkDrawIndirectCommand)
-#define TEXTURE_COUNT 40
+#define TEXTURE_COUNT 256
 #define KEYBOARD_KEY_COUNT 256
+#define PRIMITIVE_MAX_COUNT 10000
 #define WND_CLASSNAME "mywindow"
 
 typedef unsigned char byte;
@@ -170,56 +171,7 @@ namespace vi::time
 
 namespace vi::util
 {
-	size_t getFileSize(FILE* file)
-	{
-		size_t retval = 0;
-		fseek(file, SEEK_SET, 0);
-
-		while (!feof(file))
-		{
-			fgetc(file);
-			retval++;
-		}
-
-		fseek(file, SEEK_SET, 0);
-
-		return retval;
-	}
-
-	byte* readFile(const char* filename, vi::memory::heap* h, size_t* outSize)
-	{
-		FILE* file = fopen(filename, "rb");
-
-#ifdef VIDBG
-		if (!file)
-		{
-			fprintf(stderr, "Could not open %s\n", filename);
-			exit(1);
-		}
-#endif
-
-		size_t size = getFileSize(file);
-		byte* block = (byte*)vi::memory::heapAlloc(h, size + 1);
-		size_t it = 0;
-
-		while (true)
-		{
-			int c = fgetc(file);
-
-			if (c == EOF)
-				break;
-
-			block[it++] = c;
-		}
-
-		fclose(file);
-		block[it++] = 0;
-
-        if (outSize != nullptr)
-            * outSize = size - 1;
-
-		return block;
-	}
+	
 }
 
 namespace vi::math
@@ -234,6 +186,57 @@ namespace vi::math
 
 namespace vi::system
 {
+    size_t getFileSize(FILE* file)
+    {
+        size_t retval = 0;
+        fseek(file, SEEK_SET, 0);
+
+        while (!feof(file))
+        {
+            fgetc(file);
+            retval++;
+        }
+
+        fseek(file, SEEK_SET, 0);
+
+        return retval;
+    }
+
+    byte* readFile(const char* filename, vi::memory::heap* h, size_t* outSize)
+    {
+        FILE* file = fopen(filename, "rb");
+
+#ifdef VIDBG
+        if (!file)
+        {
+            fprintf(stderr, "Could not open %s\n", filename);
+            exit(1);
+        }
+#endif
+
+        size_t size = getFileSize(file);
+        byte* block = (byte*)vi::memory::heapAlloc(h, size + 1);
+        size_t it = 0;
+
+        while (true)
+        {
+            int c = fgetc(file);
+
+            if (c == EOF)
+                break;
+
+            block[it++] = c;
+        }
+
+        fclose(file);
+        block[it++] = 0;
+
+        if (outSize != nullptr)
+            *outSize = size - 1;
+
+        return block;
+    }
+
     LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
         switch (uMsg)
@@ -951,8 +954,8 @@ namespace vi::graphics
 		*/
 		size_t vsCodeSize;
 		size_t psCodeSize;
-		byte* vsCode = util::readFile("vert.spv", &helperHeap, &vsCodeSize);
-		byte* psCode = util::readFile("frag.spv", &helperHeap, &psCodeSize);
+		byte* vsCode = system::readFile("vert.spv", &helperHeap, &vsCodeSize);
+		byte* psCode = system::readFile("frag.spv", &helperHeap, &psCodeSize);
 
 		VkShaderModuleCreateInfo shaderCreateInfo = {};
 		shaderCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1715,14 +1718,14 @@ namespace vi::graphics
     void pushTextures(renderer* g, texture* textures, uint count)
     {
 #ifdef VIDBG
-        if (count > 40)
+        if (count > TEXTURE_COUNT)
         {
-            fprintf(stderr, "pushTextures max count is 40\n");
+            fprintf(stderr, "exceeded max texture count\n");
             exit(1);
         }
 #endif
 
-        VkDescriptorImageInfo descriptorImageInfo[40];
+        VkDescriptorImageInfo descriptorImageInfo[TEXTURE_COUNT];
 
         for (uint i = 0; i < count; i++)
         {
