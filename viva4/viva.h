@@ -423,6 +423,13 @@ namespace vi::graphics
         VkDeviceMemory memory;
     };
 
+    struct animation
+    {
+        drawInfo info;
+        float speed;
+
+    };
+
 	void _vkCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkDevice device, VkBuffer* buffer,
 		VkMemoryPropertyFlags memoryFlags, VkPhysicalDeviceMemoryProperties memProperties, VkDeviceMemory* bufferMemory)
 	{
@@ -1891,6 +1898,12 @@ namespace vi::graphics::transform
     {
         t->sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
         t->sy = 2.0f / g->swapChainExtent.height / c->scale * height;
+    }
+
+    void setScreenPos(renderer* g, camera* c, uint x, uint y, drawInfo* t)
+    {
+        t->x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
+        t->y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
     }
 }
 

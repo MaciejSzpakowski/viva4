@@ -65,7 +65,7 @@ void main() {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
-		t.ox, t.oy, 0, 1
+		-t.ox, -t.oy, 0, 1
 	);
 	// scale
 	mat4 sca = mat4(

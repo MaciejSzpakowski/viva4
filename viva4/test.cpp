@@ -1,10 +1,10 @@
 #include "viva.h"
 
-vi::graphics::drawInfo t[vi::graphics::PRIMITIVE_MAX_COUNT];
 
 int main()
 {
-    vi::graphics::texture tex[3];
+    vi::graphics::drawInfo t[10];
+    vi::graphics::texture tex[4];
     vi::viva v = {};
     vi::vivaInfo info = {};
 	info.width = 1920;
@@ -16,12 +16,13 @@ int main()
     vi::graphics::createTextureFromFile(&v.graphics, "bk.png", tex);
     vi::graphics::createTextureFromFile(&v.graphics, "sm.png", tex + 1);
     vi::graphics::createTextureFromFile(&v.graphics, "elf.png", tex + 2);
+    vi::graphics::createTextureFromFile(&v.graphics, "ani.bmp", tex + 3);
 
-    vi::graphics::pushTextures(&v.graphics, tex, 3);
+    vi::graphics::pushTextures(&v.graphics, tex, 4);
         
     t[0] = {};
-    t[0].sx = 1;
-    t[0].sy = 1;
+    t[0].sx = 3;
+    t[0].sy = 3;
     t[0].textureIndex = 0;
     t[0].left = 0;
     t[0].top = 0;
@@ -30,8 +31,8 @@ int main()
     t[0].r = 1;
     t[0].g = 1;
     t[0].b = 1;
-
-    vi::graphics::transform::setScalePixels(&v.graphics, &v.camera, tex[0].width, tex[0].height, t);
+    t[0].ox = -0.5f;
+    t[0].oy = -0.5f;
 
     t[1] = {};
     t[1].sx = 3;
@@ -44,6 +45,8 @@ int main()
     t[1].r = 1;
     t[1].g = 1;
     t[1].b = 1;
+    t[1].ox = -0.5f;
+    t[1].oy = -0.5f;
 
     t[2] = {};
     t[2].sx = 3;
@@ -56,6 +59,8 @@ int main()
     t[2].r = 1;
     t[2].g = 1;
     t[2].b = 1;
+    t[2].ox = -0.5f;
+    t[2].oy = -0.5f;
 
     t[3] = {};
     t[3].sx = 3;
@@ -65,6 +70,11 @@ int main()
     t[3].r = 1.0f;
     t[3].g = 0.2f;
     t[3].b = 0;
+
+    vi::graphics::transform::setScreenPos(&v.graphics, &v.camera, 0, 0, t);
+    vi::graphics::transform::setScalePixels(&v.graphics, &v.camera, tex[0].width, tex[0].height, t);
+    vi::graphics::transform::setScreenPos(&v.graphics, &v.camera, 100, 100, t+1);
+    vi::graphics::transform::setScreenPos(&v.graphics, &v.camera, 1000, 800, t+2);
     
     vi::system::loop([&]()
     {
@@ -76,12 +86,12 @@ int main()
         //t[0].y = cosf(gameTime) * 3;
         //t[0].rot = gameTime;
 
-        t[1].x = sinf(gameTime + vi::math::PI * 2 / 3) * 3;
-        t[1].y = cosf(gameTime + vi::math::PI * 2 / 3) * 3;
+        //t[1].x = sinf(gameTime + vi::math::PI * 2 / 3) * 3;
+        //t[1].y = cosf(gameTime + vi::math::PI * 2 / 3) * 3;
         //t[1].rot = gameTime + vi::math::TWO_PI / 3;
 
-        t[2].x = sinf(gameTime + vi::math::PI * 4 / 3) * 3;
-        t[2].y = cosf(gameTime + vi::math::PI * 4 / 3) * 3;
+        //t[2].x = sinf(gameTime + vi::math::PI * 4 / 3) * 3;
+        //t[2].y = cosf(gameTime + vi::math::PI * 4 / 3) * 3;
         //t[2].rot = gameTime + vi::math::TWO_PI / 3 * 2;
 
         if (vi::input::isKeyPressed(&v.keyboard, 'A'))
@@ -114,7 +124,7 @@ int main()
         if (vi::input::isKeyPressed(&v.keyboard, (int)vi::input::key::END))
             t[0].sy += 0.5f;
 
-        vi::graphics::drawScene(&v.graphics, t, 4, &v.camera);
+        vi::graphics::drawScene(&v.graphics, t, 1, &v.camera);
     });
 
     vi::graphics::destroyTexture(&v.graphics, tex);
