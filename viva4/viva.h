@@ -22,11 +22,8 @@
 
 #define ENABLE_VALIDATION
 #define VIDBG
-#define UNIFORM_BUFFER_SIZE 1024 * 1024
-#define INDIRECT_BUFFER_SIZE sizeof(VkDrawIndirectCommand)
-#define TEXTURE_COUNT 256
+
 #define KEYBOARD_KEY_COUNT 256
-#define PRIMITIVE_MAX_COUNT 10000
 #define WND_CLASSNAME "mywindow"
 
 typedef unsigned char byte;
@@ -338,6 +335,11 @@ namespace vi::system
 // win32vk
 namespace vi::graphics
 {
+    const uint _UNIFORM_BUFFER_SIZE = 1024 * 1024;
+    const uint _INDIRECT_BUFFER_SIZE = sizeof(VkDrawIndirectCommand);
+    const uint TEXTURE_COUNT = 256;
+    const uint PRIMITIVE_MAX_COUNT = 10000;
+
     struct camera
     {
         float aspectRatio;
@@ -1308,7 +1310,7 @@ namespace vi::graphics
         /**************************************************************************
         Indirect draw buffer
         */
-        _vkCreateBuffer(INDIRECT_BUFFER_SIZE, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, g->device, &g->drawIndirectBuffer,
+        _vkCreateBuffer(_INDIRECT_BUFFER_SIZE, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT, g->device, &g->drawIndirectBuffer,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g->memProperties, &g->drawIndirectBufferMemory);
 
 		/**************************************************************************
@@ -1316,7 +1318,7 @@ namespace vi::graphics
 		Purpose: to set data for shaders every frame
 		Note: A uniform buffer is a buffer that is made accessible in a read-only fashion to shaders so that the shaders can read constant parameter data.
 		*/
-		_vkCreateBuffer(UNIFORM_BUFFER_SIZE, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, g->device, &g->uniformBuffer,
+		_vkCreateBuffer(_UNIFORM_BUFFER_SIZE, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, g->device, &g->uniformBuffer,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, g->memProperties, &g->uniformBufferMemory);
 
 		// descriptor pool and sets
@@ -1374,7 +1376,7 @@ namespace vi::graphics
 		VkDescriptorBufferInfo descriptorUniformBufferInfo = {};
 		descriptorUniformBufferInfo.buffer = g->uniformBuffer;
 		descriptorUniformBufferInfo.offset = 0;
-		descriptorUniformBufferInfo.range = UNIFORM_BUFFER_SIZE;
+		descriptorUniformBufferInfo.range = _UNIFORM_BUFFER_SIZE;
 
 		VkWriteDescriptorSet descriptorWriteForUniformBuffer = {};
 		descriptorWriteForUniformBuffer.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1437,7 +1439,7 @@ namespace vi::graphics
 		_vkInitStep1(info, g);
 	}
 
-	void graphicsDestroy(renderer* g)
+	void destroyGraphics(renderer* g)
 	{
         vkQueueWaitIdle(g->queue);
 
@@ -1704,12 +1706,12 @@ namespace vi::graphics
         drawParams.vertexCount = 4;
 
         void* mappedIndirectBufferMemory = nullptr;
-        vkMapMemory(g->device, g->drawIndirectBufferMemory, 0, INDIRECT_BUFFER_SIZE, 0, &mappedIndirectBufferMemory);
-        memcpy(mappedIndirectBufferMemory, &drawParams, INDIRECT_BUFFER_SIZE);
+        vkMapMemory(g->device, g->drawIndirectBufferMemory, 0, _INDIRECT_BUFFER_SIZE, 0, &mappedIndirectBufferMemory);
+        memcpy(mappedIndirectBufferMemory, &drawParams, _INDIRECT_BUFFER_SIZE);
         vkUnmapMemory(g->device, g->drawIndirectBufferMemory);
 
         void* mappedUniformBufferMemory = nullptr;
-        vkMapMemory(g->device, g->uniformBufferMemory, 0, UNIFORM_BUFFER_SIZE, 0, &mappedUniformBufferMemory);
+        vkMapMemory(g->device, g->uniformBufferMemory, 0, _UNIFORM_BUFFER_SIZE, 0, &mappedUniformBufferMemory);
         memcpy(mappedUniformBufferMemory, c, sizeof(camera));
         memcpy((byte*)mappedUniformBufferMemory + sizeof(camera), t, sizeof(drawInfo) * instances);
         vkUnmapMemory(g->device, g->uniformBufferMemory);
@@ -1866,6 +1868,13 @@ namespace vi::graphics
         vkQueueWaitIdle(g->queue);
     }
 
+    void drawScene(renderer* g, drawInfo* t, uint instances, camera* c)
+    {
+        beginScene(g);
+        draw(g, t, instances, c);
+        endScene(g);
+    }
+
     void initCamera(renderer* g, camera* c)
     {
         c->aspectRatio = g->swapChainExtent.width / (float)g->swapChainExtent.height;
@@ -1876,11 +1885,41 @@ namespace vi::graphics
     }
 }
 
+namespace vi::graphics::transform
+{
+    void setScalePixels(renderer* g, camera* c, uint width, uint height, drawInfo* t)
+    {
+        t->sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
+        t->sy = 2.0f / g->swapChainExtent.height / c->scale * height;
+    }
+}
+
 namespace vi::input
 {
     enum class key : int
     {
-
+        LEFT = VK_LEFT,
+        RIGHT = VK_RIGHT,
+        UP = VK_UP,
+        DOWN = VK_DOWN,
+        INSERT = VK_INSERT,
+        DEL = VK_DELETE,
+        HOME = VK_HOME,
+        END = VK_END,
+        PAGEUP = VK_PRIOR,
+        PAGEDOWN = VK_NEXT,
+        TAB = VK_TAB,
+        SPACE = VK_SPACE,
+        LCONTROL = VK_LCONTROL,
+        RCONTROL = VK_RCONTROL,
+        BACKSPACE = VK_BACK,
+        ENTER = VK_RETURN,
+        ESCAPE = VK_ESCAPE,
+        LSHIFT = VK_LSHIFT,
+        RSHIFT = VK_RSHIFT,
+        LALT = VK_LMENU,
+        RALT = VK_RMENU,
+        CAPSLOCK = VK_CAPITAL
     };
 
     struct keyboard

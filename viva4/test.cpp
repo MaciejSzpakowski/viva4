@@ -1,13 +1,12 @@
 #include "viva.h"
-#include <string>
 
+vi::graphics::drawInfo t[vi::graphics::PRIMITIVE_MAX_COUNT];
 
 int main()
 {
-    vi::graphics::drawInfo t[PRIMITIVE_MAX_COUNT];
     vi::graphics::texture tex[3];
-    vi::viva v;
-	vi::vivaInfo info;
+    vi::viva v = {};
+    vi::vivaInfo info = {};
 	info.width = 1920;
 	info.height = 1080;
 	info.title = "Viva4!";
@@ -21,8 +20,8 @@ int main()
     vi::graphics::pushTextures(&v.graphics, tex, 3);
         
     t[0] = {};
-    t[0].sx = 3;
-    t[0].sy = 3;
+    t[0].sx = 1;
+    t[0].sy = 1;
     t[0].textureIndex = 0;
     t[0].left = 0;
     t[0].top = 0;
@@ -30,7 +29,9 @@ int main()
     t[0].bottom = 1;
     t[0].r = 1;
     t[0].g = 1;
-    t[0].b = 0;
+    t[0].b = 1;
+
+    vi::graphics::transform::setScalePixels(&v.graphics, &v.camera, tex[0].width, tex[0].height, t);
 
     t[1] = {};
     t[1].sx = 3;
@@ -101,27 +102,25 @@ int main()
         if (vi::input::isKeyPressed(&v.keyboard, 'E'))
             t[0].rot += 3.141592f / 6;
 
-        if (vi::input::isKeyPressed(&v.keyboard, VK_PRIOR))
+        if (vi::input::isKeyPressed(&v.keyboard, (int)vi::input::key::PAGEDOWN))
             t[0].sx -= 0.5f;
 
-        if (vi::input::isKeyPressed(&v.keyboard, VK_NEXT))
+        if (vi::input::isKeyPressed(&v.keyboard, (int)vi::input::key::PAGEUP))
             t[0].sx += 0.5f;
 
-        if (vi::input::isKeyPressed(&v.keyboard, VK_HOME))
+        if (vi::input::isKeyPressed(&v.keyboard, (int)vi::input::key::HOME))
             t[0].sy -= 0.5f;
 
-        if (vi::input::isKeyPressed(&v.keyboard, VK_END))
+        if (vi::input::isKeyPressed(&v.keyboard, (int)vi::input::key::END))
             t[0].sy += 0.5f;
 
-        vi::graphics::beginScene(&v.graphics);
-        vi::graphics::draw(&v.graphics, t, 4, &v.camera);
-        vi::graphics::endScene(&v.graphics);
+        vi::graphics::drawScene(&v.graphics, t, 4, &v.camera);
     });
 
     vi::graphics::destroyTexture(&v.graphics, tex);
     vi::graphics::destroyTexture(&v.graphics, tex + 1);
     vi::graphics::destroyTexture(&v.graphics, tex + 2);
-    vi::graphics::graphicsDestroy(&v.graphics);
+    vi::graphics::destroyGraphics(&v.graphics);
 
 	return 0;
 }
