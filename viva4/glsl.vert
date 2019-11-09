@@ -54,42 +54,42 @@ void main() {
 	transform t = ubo.t[gl_InstanceIndex];
 	vec2 uv[4] = vec2[](vec2(t.left, t.top),vec2(t.left, t.bottom),vec2(t.right, t.top),vec2(t.right, t.bottom));
 	// camera
-	mat4 m1 = mat4(
+	mat4 cam = mat4(
 		1/ubo.cam.aspectRatio * ubo.cam.scale, 0, 0, 0,
 		0, ubo.cam.scale, 0, 0,
 		0, 0, 1, 0,
 		0, 0, 0, 1
 	);
 	// origin
-	mat4 m2 = mat4(
+	mat4 ori = mat4(
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
 		t.ox, t.oy, 0, 1
 	);
 	// scale
-	mat4 m3 = mat4(
+	mat4 sca = mat4(
 		t.sx, 0, 0, 0,
 		0, t.sy, 0, 0,
 		0, 0, 1, 0,
 		0, 0, 0, 1
 	);
 	// rot
-	mat4 m4 = mat4(
+	mat4 rot = mat4(
 		cos(t.rot), sin(t.rot), 0, 0,
 		-sin(t.rot), cos(t.rot), 0, 0,
 		0, 0, 1, 0,
 		0, 0, 0, 1
 	);
 	// loc
-	mat4 m5 = mat4(
+	mat4 loc = mat4(
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
 		t.x, t.y, 0, 1 // z from transform is not put over here because it's on the vertex itself
 	);
 	vec4 v = vec4(vertices[gl_VertexIndex].x, vertices[gl_VertexIndex].y,  ubo.t[gl_InstanceIndex].z, 1.0);
-	gl_Position = m1 * m5 * m3 * m4 * m2 * v;
+	gl_Position = cam * loc * rot * sca * ori * v;
 	fragColor = vec3(t.r,t.g,t.b);		
 	fragTexCoord = uv[gl_VertexIndex];
 	textureIndex = t.textureInstance;

@@ -1,21 +1,22 @@
 #include "viva.h"
+#include <string>
 
-vi::graphics::drawInfo t[PRIMITIVE_MAX_COUNT];
 
 int main()
 {
+    vi::graphics::drawInfo t[PRIMITIVE_MAX_COUNT];
+    vi::graphics::texture tex[3];
+    vi::viva v;
 	vi::vivaInfo info;
 	info.width = 1920;
 	info.height = 1080;
 	info.title = "Viva4!";
-    vi::viva v;
     vi::initViva(&v, &info);
     v.camera.scale = 0.1f;
 
-    vi::graphics::texture tex[3];
-    vi::graphics::createTexture(&v.graphics, "bk.png", tex);
-    vi::graphics::createTexture(&v.graphics, "sm.png", tex + 1);
-    vi::graphics::createTexture(&v.graphics, "elf.png", tex + 2);
+    vi::graphics::createTextureFromFile(&v.graphics, "bk.png", tex);
+    vi::graphics::createTextureFromFile(&v.graphics, "sm.png", tex + 1);
+    vi::graphics::createTextureFromFile(&v.graphics, "elf.png", tex + 2);
 
     vi::graphics::pushTextures(&v.graphics, tex, 3);
         
@@ -70,8 +71,8 @@ int main()
         vi::time::updateTimer(&v.timer);
 
         float gameTime = vi::time::getGameTimeSec(&v.timer);
-        t[0].x = sinf(gameTime) * 3;
-        t[0].y = cosf(gameTime) * 3;
+        //t[0].x = sinf(gameTime) * 3;
+        //t[0].y = cosf(gameTime) * 3;
         //t[0].rot = gameTime;
 
         t[1].x = sinf(gameTime + vi::math::PI * 2 / 3) * 3;
@@ -82,35 +83,35 @@ int main()
         t[2].y = cosf(gameTime + vi::math::PI * 4 / 3) * 3;
         //t[2].rot = gameTime + vi::math::TWO_PI / 3 * 2;
 
-        /*if (vi::input::isKeyPressed(&k, 'A'))
+        if (vi::input::isKeyPressed(&v.keyboard, 'A'))
             t[0].x--;
 
-        if (vi::input::isKeyPressed(&k, 'D'))
+        if (vi::input::isKeyPressed(&v.keyboard, 'D'))
             t[0].x++;
 
-        if (vi::input::isKeyPressed(&k, 'W'))
+        if (vi::input::isKeyPressed(&v.keyboard, 'W'))
             t[0].y--;
 
-        if (vi::input::isKeyPressed(&k, 'S'))
+        if (vi::input::isKeyPressed(&v.keyboard, 'S'))
             t[0].y++;
 
-        if (vi::input::isKeyPressed(&k, 'Q'))
+        if (vi::input::isKeyPressed(&v.keyboard, 'Q'))
             t[0].rot -= 3.141592f / 6;
 
-        if (vi::input::isKeyPressed(&k, 'E'))
+        if (vi::input::isKeyPressed(&v.keyboard, 'E'))
             t[0].rot += 3.141592f / 6;
 
-        if (vi::input::isKeyPressed(&k, VK_PRIOR))
-        {
+        if (vi::input::isKeyPressed(&v.keyboard, VK_PRIOR))
             t[0].sx -= 0.5f;
-            t[0].sy -= 0.5f;
-        }
 
-        if (vi::input::isKeyPressed(&k, VK_NEXT))
-        {
+        if (vi::input::isKeyPressed(&v.keyboard, VK_NEXT))
             t[0].sx += 0.5f;
+
+        if (vi::input::isKeyPressed(&v.keyboard, VK_HOME))
+            t[0].sy -= 0.5f;
+
+        if (vi::input::isKeyPressed(&v.keyboard, VK_END))
             t[0].sy += 0.5f;
-        }*/
 
         vi::graphics::beginScene(&v.graphics);
         vi::graphics::draw(&v.graphics, t, 4, &v.camera);

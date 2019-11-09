@@ -1471,8 +1471,8 @@ namespace vi::graphics
         vkDestroyInstance(g->instance, nullptr);
 	}
 
-    // size in bytes of the texture will be 4 * width * height
-    void createTexture(renderer* g, byte* data, uint width, uint height, texture* result)
+    // Create texture where pixels are uncompressed, not encoded, 4 bytes per pixel formatted RGBA, stored lineary.
+    void createTextureFromBytes(renderer* g, byte* data, uint width, uint height, texture* result)
     {
         VkResult vkResult;
 
@@ -1645,7 +1645,31 @@ namespace vi::graphics
         result->memory = textureImageMemory;
     }
 
-    void createTexture(renderer* g, const char* filename, texture* result)
+    // Create texture from file in memory.
+    // Difference between this and 'createTextureFromFile' is that file is in memory.
+    // It's useful because you can have PNG or other encoded image in memory
+    // and this can create texture from that.
+    void createTextureFromInMemoryFile(renderer* g, byte* file, int len, texture* result)
+    {
+        int x = -1, y = -1, n = -1;
+        const int components = 4; // components means how many elements from 'RGBA'
+                                  // you want to return, I want 4 (RGBA) even in not all 4 are present
+        byte* data = stbi_load_from_memory(file, len, &x, &y, &n, components);
+
+#ifdef VIDBG
+        if (data == nullptr)
+        {
+            fprintf(stderr, "createTexture could not open the file\n");
+            exit(1);
+        }
+#endif
+
+        createTextureFromBytes(g, data, x, y, result);
+        stbi_image_free(data);
+    }
+
+    // Create texture from file on disk. Supports lots of formats.
+    void createTextureFromFile(renderer* g, const char* filename, texture* result)
     {
         int x = -1, y = -1, n = -1;
         const int components = 4; // components means how many elements from 'RGBA'
@@ -1660,8 +1684,8 @@ namespace vi::graphics
         }
 #endif
 
-        createTexture(g, data, x, y, result);
-        free(data);
+        createTextureFromBytes(g, data, x, y, result);
+        stbi_image_free(data);
     }
 
     void destroyTexture(renderer* g, texture* t)
