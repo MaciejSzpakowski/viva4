@@ -312,7 +312,8 @@ namespace vi::system
         UnregisterClass(WND_CLASSNAME, w->hinstance);
     }
 
-    void loop(std::function<void()> activity)
+    template <typename T>
+    void loop(std::function<void(T)> activity, T data)
     {
         MSG msg;
 
@@ -327,7 +328,7 @@ namespace vi::system
             if (msg.message == WM_QUIT)
                 break;
 
-            activity();
+            activity(data);
         }
     }
 }
@@ -413,6 +414,14 @@ namespace vi::graphics
         float b;
     };
 
+    struct uv
+    {
+        float left;
+        float top;
+        float right;
+        float bottom;
+    };
+
     struct texture
     {
         int index;
@@ -423,11 +432,32 @@ namespace vi::graphics
         VkDeviceMemory memory;
     };
 
+    // for now speed must be non negative
     struct animation
     {
-        drawInfo info;
+        drawInfo* info;
         float speed;
+        float realSpeed;
+        uv* uv;
+        uint frameCount;
+        int currentFrame;
+        float lastFrameTime;
 
+        // used for limited number of loops
+        float startTime;
+        float endTime;
+    };
+
+    struct font
+    {
+        texture* tex;
+    };
+
+    struct text
+    {
+        font* font;
+        const char* str;
+        drawInfo* info;
     };
 
 	void _vkCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkDevice device, VkBuffer* buffer,
@@ -1657,7 +1687,7 @@ namespace vi::graphics
     // Create texture from file in memory.
     // Difference between this and 'createTextureFromFile' is that file is in memory.
     // It's useful because you can have PNG or other encoded image in memory
-    // and this can create texture from that.
+    // and this can create texture from that. Supports lots of formats.
     void createTextureFromInMemoryFile(renderer* g, byte* file, int len, texture* result)
     {
         int x = -1, y = -1, n = -1;
@@ -1889,6 +1919,57 @@ namespace vi::graphics
         c->scale = 1;
         c->x = 0;
         c->y = 0;
+    }
+
+    void startAnimation(time::timer* t, animation* a, uint loops)
+    {
+        a->realSpeed = a->speed;
+        a->lastFrameTime = t->gameTime;
+        a->startTime = t->gameTime;
+        a->endTime = t->gameTime + a->frameCount * loops * abs(a->speed);
+
+        if (loops == 0)
+            a->endTime = FLT_MAX;
+    }
+
+    void updateAnimation(time::timer* t, animation* a)
+    {
+        if (a->realSpeed == 0)
+            return;
+
+        if (t->gameTime >= a->endTime)
+        {
+            a->realSpeed = 0;
+            return;
+        }
+
+        float deltaTime = t->gameTime - a->lastFrameTime;
+        int deltaFrames = (int)(deltaTime / a->realSpeed);
+
+        // it't to early to change frames
+        if (abs(deltaFrames) < 1)
+            return;
+
+        a->currentFrame += deltaFrames;
+
+        // frame changed so u[date last change time
+        a->lastFrameTime = t->gameTime;
+
+        // this mod and if statement provide bidirectional mod for range "0 ~ maxFrames"
+        a->currentFrame %= a->frameCount;
+        if (a->currentFrame < 0)
+            a->currentFrame = a->frameCount + a->currentFrame;
+
+        uv* uv = a->uv + a->currentFrame;
+        a->info->left = uv->left;
+        a->info->right = uv->right;
+        a->info->top = uv->top;
+        a->info->bottom = uv->bottom;
+    }
+
+    void stopAnimation(animation* a)
+    {
+        a->realSpeed = 0;
     }
 }
 
