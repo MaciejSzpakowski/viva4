@@ -436,9 +436,9 @@ namespace vi::graphics
     struct animation
     {
         drawInfo* info;
+        uv* uv;
         float speed;
         float realSpeed;
-        uv* uv;
         uint frameCount;
         int currentFrame;
         float lastFrameTime;
@@ -451,6 +451,7 @@ namespace vi::graphics
     struct font
     {
         texture* tex;
+        uv uv[256];
     };
 
     struct text
@@ -458,6 +459,10 @@ namespace vi::graphics
         font* font;
         const char* str;
         drawInfo* info;
+        uint textureIndex;
+        uv* uv;
+        float horizontalSpace;
+        float verticalSpace;
     };
 
 	void _vkCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkDevice device, VkBuffer* buffer,
@@ -1971,11 +1976,105 @@ namespace vi::graphics
     {
         a->realSpeed = 0;
     }
+
+    struct uvSplitInfo
+    {
+        uint pixelTexWidth;
+        uint pixelTexHeight;
+        uint pixelOffsetx;
+        uint pixelOffsety;
+        uint pixelFrameWidth;
+        uint pixelFrameHeight;
+        uint rowLength;
+        uint frameCount;
+    };
+
+    // utility function to calculate uv
+    // offset is where on texture to start
+    // width and height are frame size
+    // row length: in case frames on texture are stacked in multiple rows, how many frames per row are there
+    // frame count is how many uv elements to calculate
+    // uv is the destination, there must be at least as many uv elements avaiable as 'frameCount'
+    void uvSplit(uvSplitInfo* info, uv* uv)
+    {
+        const float width = (float)info->pixelFrameWidth / info->pixelTexWidth;
+        const float height = (float)info->pixelFrameHeight / info->pixelTexHeight;
+        float x = info->pixelOffsetx;
+        float y = info->pixelOffsety;
+
+        for (uint i = 0; i < info->frameCount; i++, uv++)
+        {
+            uv->left = x;
+            uv->top = y;
+            uv->right = x + width;
+            uv->bottom = y + height;
+
+            x += width;
+
+            if (x >= width* info->rowLength)
+            {
+                x = 0;
+                y += height;
+            }
+        }
+    }
+
+    void updateTextTransform(text* t)
+    {
+        if (t->str[0] == 0)
+            return;
+
+        const char* it = t->str;
+        drawInfo* d = t->info;
+        float x = t->info->x + t->info->sx + t->horizontalSpace;
+        float y = t->info->y;
+
+        d->left = t->uv[*it - ' '].left;
+        d->top = t->uv[*it - ' '].top;
+        d->right = t->uv[*it - ' '].right;
+        d->bottom = t->uv[*it - ' '].bottom;
+        d->textureIndex = t->textureIndex;
+
+        it++;
+        d++;
+
+        while (true)
+        {
+            // iterate untill null terminating character
+            if (*it == 0)
+                break;
+
+            if (*it == '\n')
+            {
+                x = t->info->x;
+                y += t->info->sy + t->verticalSpace;
+                it++;
+                continue;
+            }
+
+            uv glyph = t->uv[*it - ' '];
+            d->left = glyph.left;
+            d->top = glyph.top;
+            d->right = glyph.right;
+            d->bottom = glyph.bottom;
+            d->sx = t->info->sx;
+            d->sy = t->info->sy;
+            d->x = x;
+            d->y = y;
+            d->textureIndex = t->textureIndex;
+            d->ox = t->info->ox;
+            d->oy = t->info->oy;
+
+            it++;
+            d++;
+            x += t->info->sx + t->horizontalSpace;            
+        }
+    }
 }
 
 namespace vi::graphics::transform
 {
-    void setScalePixels(renderer* g, camera* c, uint width, uint height, drawInfo* t)
+    void setPixelScale(renderer* g, camera* c, uint width, uint height, drawInfo* t)
     {
         t->sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
         t->sy = 2.0f / g->swapChainExtent.height / c->scale * height;
@@ -1985,6 +2084,13 @@ namespace vi::graphics::transform
     {
         t->x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
         t->y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
+    }
+
+    // puts width and height in world coordinates of 1px in f[0] and f[1]
+    void getPixelScale(renderer* g, camera* c, float* f)
+    {
+        f[0] = 2.0f / g->swapChainExtent.width / c->scale * c->aspectRatio;
+        f[1] = 2.0f / g->swapChainExtent.height / c->scale;
     }
 }
 

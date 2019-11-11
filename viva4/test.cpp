@@ -3,9 +3,11 @@
 struct gameData
 {
     vi::graphics::animation a[10];
-    vi::graphics::drawInfo t[10];
+    vi::graphics::drawInfo t[100];
     vi::viva v;
 };
+
+const char* str = "Jedziemy poziomo\nnikc mobilem\no juz na miejscu bedziemy za chwile";
 
 void loop(gameData* data)
 {
@@ -57,12 +59,12 @@ void loop(gameData* data)
         t[0].sy += 0.5f;
 
     vi::graphics::updateAnimation(&data->v.timer, data->a);
-    vi::graphics::drawScene(&data->v.graphics, data->t + 4, 1, &data->v.camera);
+    vi::graphics::drawScene(&data->v.graphics, data->t + 10, strlen(str), &data->v.camera);
 }
 
 int main()
 {
-    vi::graphics::texture tex[4];
+    vi::graphics::texture tex[10];
     gameData data = {};
     vi::vivaInfo info = {};
 	info.width = 1920;
@@ -75,8 +77,9 @@ int main()
     vi::graphics::createTextureFromFile(&data.v.graphics, "sm.png", tex + 1);
     vi::graphics::createTextureFromFile(&data.v.graphics, "elf.png", tex + 2);
     vi::graphics::createTextureFromFile(&data.v.graphics, "ani.bmp", tex + 3);
+    vi::graphics::createTextureFromFile(&data.v.graphics, "font1.png", tex + 4);
 
-    vi::graphics::pushTextures(&data.v.graphics, tex, 4);
+    vi::graphics::pushTextures(&data.v.graphics, tex, 5);
 
     vi::graphics::uv ani1uv[10] = { {0,0,0.1f,1},{0.1f,0,0.2f,1},{0.2f,0,0.3f,1},{0.3f,0,0.4f,1},{0.4f,0,0.5f,1},{0.5f,0,0.6f,1},{0.6f,0,0.7f,1},{0.7f,0,0.8f,1},{0.8f,0,0.9f,1},{0.9f,0,1,1} };
 
@@ -147,15 +150,60 @@ int main()
     data.t[3].b = 0;
 
     vi::graphics::transform::setScreenPos(&data.v.graphics, &data.v.camera, 0, 0, data.t);
-    vi::graphics::transform::setScalePixels(&data.v.graphics, &data.v.camera, tex[0].width, tex[0].height, data.t);
+    vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, tex[0].width, tex[0].height, data.t);
     vi::graphics::transform::setScreenPos(&data.v.graphics, &data.v.camera, 100, 100, data.t + 1);
     vi::graphics::transform::setScreenPos(&data.v.graphics, &data.v.camera, 1000, 800, data.t + 2);
+    
+    vi::graphics::uv glyphs[32 * 3];
+    vi::graphics::uvSplitInfo splitInfo = {};
+    splitInfo.frameCount = 32 * 3;
+    splitInfo.pixelFrameHeight = 12;
+    splitInfo.pixelFrameWidth = 8;
+    splitInfo.pixelTexHeight = 36;
+    splitInfo.pixelTexWidth = 256;
+    splitInfo.rowLength = 32;
+    vi::graphics::uvSplit(&splitInfo, glyphs);
+
+    for (uint i = 0; i < strlen(str); i++)
+    {
+        data.t[i + 10] = {};
+        data.t[i + 10].r = 1;
+        data.t[i + 10].g = 0;
+        data.t[i + 10].b = 0;
+    }
+
+    data.t[10].b = 1;
+    data.t[10].r = 0.5f;
+
+    vi::graphics::text text = {};
+    text.str = str;
+    text.textureIndex = tex[4].index;
+    text.uv = glyphs;
+    text.info = data.t + 10;
+    data.t[10].ox = -0.5f;
+    data.t[10].oy = -0.5f;
+
+    vi::graphics::transform::setScreenPos(&data.v.graphics, &data.v.camera, 0, 0, data.t + 10);
+    vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 8, 12, data.t + 10);
+
+    vi::graphics::updateTextTransform(&text);
+
+    data.t[5] = {};
+    data.t[5].textureIndex = 4;
+    data.t[5].left = glyphs['a' - ' '].left;
+    data.t[5].top = glyphs['a' - ' '].top;
+    data.t[5].right = glyphs['a' - ' '].right;
+    data.t[5].bottom = glyphs['a' - ' '].bottom;
+
+    vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 8, 12, data.t + 5);
     
     vi::system::loop<gameData*>(loop, &data);
 
     vi::graphics::destroyTexture(&data.v.graphics, tex);
     vi::graphics::destroyTexture(&data.v.graphics, tex + 1);
     vi::graphics::destroyTexture(&data.v.graphics, tex + 2);
+    vi::graphics::destroyTexture(&data.v.graphics, tex + 3);
+    vi::graphics::destroyTexture(&data.v.graphics, tex + 4);
     vi::graphics::destroyGraphics(&data.v.graphics);
 
 	return 0;
