@@ -11,6 +11,11 @@ namespace examples
         vi::viva v;
     };
 
+    void keyboard()
+    {
+
+    }
+
     void timerMotionAnimation()
     {
         auto loop = [](gameData* _gameData)
@@ -60,7 +65,6 @@ namespace examples
         MAKE_SPRITE(1, -10, -0, 0, 10, 10, 1, 1, 1)
         MAKE_SPRITE(2, -6, -0, 0, 10, 10, 1, 1, 1)
         MAKE_SPRITE(3, -2, -0, 0, 10, 10, 1, 1, 1)
-        MAKE_SPRITE(4,  2, -0, 0, 10, 10, 1, 1, 1)
 
 #undef MAKE_SPRITE
 
@@ -68,8 +72,12 @@ namespace examples
         data.dyn[0] = {};
         data.dyn[0].velrot = 1.f;
 
-        // init animation
+        // init sprite for animation
+        vi::graphics::initSprite(data.sprites + 4, data.tex[0].index);
+        data.sprites[4].x = 4;
+        data.sprites[4].y = 2;
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 4, 28 * 4, data.sprites + 4);
+        // init uv for animation using convenience function
         vi::graphics::uv uvForAni[9];
         vi::graphics::uvSplitInfo usi = {};
         usi.frameCount = 4;
@@ -80,29 +88,8 @@ namespace examples
         usi.pixelTexHeight = 512;
         usi.pixelTexWidth = 512;
         usi.rowLength = 4;
-        // FUBAR
         vi::graphics::uvSplit(&usi, uvForAni);
-
-        uvForAni[0].left = 192/512.f;
-        uvForAni[0].top = 4 / 512.f;
-        uvForAni[0].right = (192 + 16) / 512.f;
-        uvForAni[0].bottom = 32 / 512.f;
-
-        uvForAni[1].left = (192+16) / 512.f;
-        uvForAni[1].top = 4 / 512.f;
-        uvForAni[1].right = (192 + 32) / 512.f;
-        uvForAni[1].bottom = 32 / 512.f;
-
-        uvForAni[2].left = (192+32) / 512.f;
-        uvForAni[2].top = 4 / 512.f;
-        uvForAni[2].right = (192 + 48) / 512.f;
-        uvForAni[2].bottom = 32 / 512.f;
-
-        uvForAni[3].left = (192+48) / 512.f;
-        uvForAni[3].top = 4 / 512.f;
-        uvForAni[3].right = (192 + 64) / 512.f;
-        uvForAni[3].bottom = 32 / 512.f;
-
+        // init animation
         vi::graphics::initAnimation(data.ani, data.sprites + 4, uvForAni, 4, 0.1f, 0);
         vi::graphics::playAnimation(data.ani, &data.v.timer);
 
@@ -244,8 +231,8 @@ namespace examples
 
     int main()
     {
-        basicSprite();
-        moreSprites();
+        //basicSprite();
+        //moreSprites();
         timerMotionAnimation();
         return 0;
     }

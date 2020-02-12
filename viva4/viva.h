@@ -2050,6 +2050,11 @@ namespace vi::graphics
     {
         a->_playing = true;
         a->_lastUpdate = time::getGameTimeSec(t);
+        // update uv to the current frame
+        a->info->left = a->uv[a->currentFrame].left;
+        a->info->top = a->uv[a->currentFrame].top;
+        a->info->right = a->uv[a->currentFrame].right;
+        a->info->bottom = a->uv[a->currentFrame].bottom;
     }
 
     // animation will stop and 'updateAnimation' will no longer animate frames
@@ -2141,8 +2146,9 @@ namespace vi::graphics
     {
         const float width = (float)info->pixelFrameWidth / info->pixelTexWidth;
         const float height = (float)info->pixelFrameHeight / info->pixelTexHeight;
-        float x = info->pixelOffsetx;
-        float y = info->pixelOffsety;
+        float offsetx = (float)info->pixelOffsetx / info->pixelTexWidth;
+        float x = offsetx;
+        float y = (float)info->pixelOffsety / info->pixelTexHeight;
 
         for (uint i = 0; i < info->frameCount; i++, uv++)
         {
@@ -2153,9 +2159,9 @@ namespace vi::graphics
 
             x += width;
 
-            if (x >= width* info->rowLength)
+            if (x >= width* info->rowLength + offsetx)
             {
-                x = 0;
+                x = offsetx;
                 y += height;
             }
         }
