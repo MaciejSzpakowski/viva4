@@ -39,6 +39,14 @@ namespace vi::memory
 		void* blocks[MAX_HEAP_BLOCKS_COUNT];
 	};
 
+    template <typename T>
+    struct pool
+    {
+        T* data;
+        uint size;
+        uint capacity;
+    };
+
 	void heapInit(heap* h)
 	{
 		for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
@@ -106,6 +114,26 @@ namespace vi::memory
 
 		h->size = 0;
 	}
+
+    template <typename T>
+    void initPool(heap* h, uint capacity, pool<T>* p)
+    {
+        p->capacity = capacity;
+        p->data = heapAlloc(h, sizeof(T) * capacity);
+        p->size = 0;
+    }
+
+    // TODO can only reserve the front
+    template <typename T>
+    T* reservePool(pool<T>* p, uint size)
+    {
+    }
+
+    template <typename T>
+    T* allocPool(pool<T>* p)
+    {
+
+    }
 }
 
 namespace vi::time
@@ -113,7 +141,7 @@ namespace vi::time
     struct timer
     {
         float gameTime;
-        float frameTime;
+        float tickTime;
         long long ticksPerSecond;
         long long startTime;
         long long prevTick;
@@ -122,7 +150,7 @@ namespace vi::time
     void initTimer(timer* t)
     {
         t->gameTime = 0;
-        t->frameTime = 0;
+        t->tickTime = 0;
         LARGE_INTEGER li;
         BOOL result = ::QueryPerformanceFrequency(&li);
 
@@ -149,14 +177,16 @@ namespace vi::time
         long long frameDelta = currentTime.QuadPart - t->prevTick;
         long long gameDelta = currentTime.QuadPart - t->startTime;
         t->prevTick = currentTime.QuadPart;
-        t->frameTime = (float)((double)frameDelta / (double)t->ticksPerSecond);
+        t->tickTime = (float)((double)frameDelta / (double)t->ticksPerSecond);
         t->gameTime = (float)((double)gameDelta / (double)t->ticksPerSecond);
     }
 
-    // get frame time in seconds
-    float getFrameTimeSec(timer* t)
+    // get tick time
+    // tick time is the time between two calls to 'updateTimer'
+    // can be used as frame time if updateTimer is called once per frame
+    float getTickTimeSec(timer* t)
     {
-        return t->frameTime;
+        return t->tickTime;
     }
 
     // get time since game started in seconds
@@ -168,7 +198,13 @@ namespace vi::time
 
 namespace vi::util
 {
-	
+    template<typename T>
+    void swap(T& a, T& b)
+    {
+        T tmp = a;
+        a = b;
+        b = tmp;
+    }
 }
 
 namespace vi::math
@@ -339,7 +375,6 @@ namespace vi::graphics
     const uint _UNIFORM_BUFFER_SIZE = 1024 * 1024;
     const uint _INDIRECT_BUFFER_SIZE = sizeof(VkDrawIndirectCommand);
     const uint TEXTURE_COUNT = 256;
-    const uint PRIMITIVE_MAX_COUNT = 10000;
 
     struct camera
     {
@@ -348,6 +383,7 @@ namespace vi::graphics
         float y;
         float rotation;
         float scale;
+        // padding because this struct must be multiple of 16bytes
         byte padding[12];
     };
 
@@ -391,27 +427,75 @@ namespace vi::graphics
         VkDescriptorPool descriptorPool;
 	};
 
+
+    // WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // you updating something ? update shaders as well
     // struct passed to uniform buffer must be multiple of 16bytes
-    struct drawInfo
+    struct sprite
     {
-        // transform
+        // pos x
         float x;
+        // pos y
         float y;
+        // pos z
         float z;
+        // scale x
         float sx;
+
+        // 16 byte
+
+        // scale y
         float sy;
+        // angle
         float rot;
+        // origin x
         float ox;
+        // origin y
         float oy;
-        // uv, color, texture
+
+        // 16 byte
+
+        // which texture
         int textureIndex;
+        // uv left
         float left;
+        // uv top
         float top;
+        // uv right
         float right;
+
+        // 16 byte
+
+        // uv bottom
         float bottom;
+        // color red
         float r;
+        // color green
         float g;
+        // color blue
         float b;
+
+        // 16 byte
+
+        // move with camera or fixed to viewport
+        //byte fixed;
+        // padding because this truct must be multiple of 16bytes
+        //byte padding[15];
+    };
+
+    struct dynamic
+    {
+        float velx, vely, velz;
+        float accx, accy, accz;
+        // angular velocity
+        float velrot;
+        // angular acceleration
+        float accrot;
+        // grow speed
+        float velsx, velsy;
+        // grow acceleration
+        float accsx, accsy;
+        float _lastUpdate;
     };
 
     struct uv
@@ -435,17 +519,19 @@ namespace vi::graphics
     // for now speed must be non negative
     struct animation
     {
-        drawInfo* info;
+        sprite* info;
         uv* uv;
         float speed;
-        float realSpeed;
         uint frameCount;
         int currentFrame;
-        float lastFrameTime;
+        uint stopAfter;
+        // this is true if last 'updateAnimation' changed 'currentFrame'
+        bool frameChanged;
 
-        // used for limited number of loops
-        float startTime;
-        float endTime;
+        uint _frameChanges;
+        float _elapsedTime;
+        float _lastUpdate;
+        bool _playing;
     };
 
     struct font
@@ -458,7 +544,6 @@ namespace vi::graphics
     {
         font* font;
         const char* str;
-        drawInfo* info;
         uint textureIndex;
         uv* uv;
         float horizontalSpace;
@@ -594,6 +679,9 @@ namespace vi::graphics
 
 	void _vkInitStep1(rendererInfo* info, renderer* g)
 	{
+        assert(sizeof(sprite) % 16 == 0);
+        assert(sizeof(graphics::camera) % 16 == 0);
+
 		memory::heap helperHeap;
 		memory::heapInit(&helperHeap);
 
@@ -1739,7 +1827,7 @@ namespace vi::graphics
         vkFreeMemory(g->device, t->memory, nullptr);
     }
 
-    void draw(renderer* g, drawInfo* t, uint instances, camera* c)
+    void draw(renderer* g, sprite* s, uint instances, camera* c)
     {
         VkDrawIndirectCommand drawParams;
         drawParams.firstInstance = 0;
@@ -1755,7 +1843,7 @@ namespace vi::graphics
         void* mappedUniformBufferMemory = nullptr;
         vkMapMemory(g->device, g->uniformBufferMemory, 0, _UNIFORM_BUFFER_SIZE, 0, &mappedUniformBufferMemory);
         memcpy(mappedUniformBufferMemory, c, sizeof(camera));
-        memcpy((byte*)mappedUniformBufferMemory + sizeof(camera), t, sizeof(drawInfo) * instances);
+        memcpy((byte*)mappedUniformBufferMemory + sizeof(camera), s, sizeof(sprite) * instances);
         vkUnmapMemory(g->device, g->uniformBufferMemory);
 
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -1910,10 +1998,10 @@ namespace vi::graphics
         vkQueueWaitIdle(g->queue);
     }
 
-    void drawScene(renderer* g, drawInfo* t, uint instances, camera* c)
+    void drawScene(renderer* g, sprite* s, uint instances, camera* c)
     {
         beginScene(g);
-        draw(g, t, instances, c);
+        draw(g, s, instances, c);
         endScene(g);
     }
 
@@ -1926,55 +2014,109 @@ namespace vi::graphics
         c->y = 0;
     }
 
-    void startAnimation(time::timer* t, animation* a, uint loops)
+    // makes minimum changes to make object show when drawn
+    void initSprite(sprite* s, uint textureIndex)
     {
-        a->realSpeed = a->speed;
-        a->lastFrameTime = t->gameTime;
-        a->startTime = t->gameTime;
-        a->endTime = t->gameTime + a->frameCount * loops * abs(a->speed);
-
-        if (loops == 0)
-            a->endTime = FLT_MAX;
+        *s = {};
+        s->textureIndex = textureIndex;
+        s->r = 1;
+        s->g = 1;
+        s->b = 1;
+        s->sx = 1;
+        s->sy = 1;
+        s->left = 0;
+        s->top = 0;
+        s->right = 1;
+        s->bottom = 1;
+    }
+    
+    // 'stopAfter' stop animation after that many frame changes, 0 = never stop
+    void initAnimation(animation* a, sprite* s, uv* uv, uint frameCount, float secondsPerFrame, uint stopAfter)
+    {
+        a->info = s;
+        a->uv = uv;
+        a->speed = secondsPerFrame;
+        a->frameCount = frameCount;
+        a->currentFrame = 0;
+        a->stopAfter = stopAfter;
+        a->frameChanged = false;
+        a->_elapsedTime = 0;
+        a->_playing = false;
+        a->_frameChanges = 0;
     }
 
+    // make 'updateAnimation' animate frames
+    void playAnimation(animation* a, time::timer* t)
+    {
+        a->_playing = true;
+        a->_lastUpdate = time::getGameTimeSec(t);
+    }
+
+    // animation will stop and 'updateAnimation' will no longer animate frames
+    void pauseAnimation(animation* a)
+    {
+        a->_playing = false;
+    }
+
+    // this is true if last 'updateAnimation' changed 'currentFrame'
+    bool animationFrameChanged(animation* a)
+    {
+        return a->frameChanged;
+    }
+
+    void animationFlipHorizontally(animation* a)
+    {
+        for (uint i = 0; i < a->frameCount; i++)
+            util::swap(a->uv[i].left, a->uv[i].right);
+    }
+
+    void animationFlipVertically(animation* a)
+    {
+        for (uint i = 0; i < a->frameCount; i++)
+            util::swap(a->uv[i].top, a->uv[i].bottom);
+    }
+
+    // current algorithm 
+    // measure how much time elapsed since last update and add it to total time elapsed
+    // if total time elapsed is greater than speed (thus measured in seconds per frame)
+    // then reduce total time elapsed by speed and change frame
     void updateAnimation(time::timer* t, animation* a)
     {
-        if (a->realSpeed == 0)
+        // not playing, early break
+        if (!a->_playing)
             return;
 
-        if (t->gameTime >= a->endTime)
+        // set frame changed to false to invalidate previous true
+        a->frameChanged = false;
+        float gameTime = time::getGameTimeSec(t);
+        // elpased since last update
+        float elapsed = gameTime - a->_lastUpdate;
+        // update last update
+        a->_lastUpdate = gameTime;
+        // update elapsed
+        a->_elapsedTime += elapsed;
+
+        // see if enough time elapsed to change frame
+        if (a->_elapsedTime > a->speed)
         {
-            a->realSpeed = 0;
-            return;
+            // subtract the duration of one frame
+            a->_elapsedTime -= a->speed;
+            // update frame index including looping
+            a->currentFrame = (a->currentFrame + 1) % a->frameCount;
+            a->frameChanged = true;
+            a->_frameChanges++;
+
+            // update uv
+            uv* uv = a->uv + a->currentFrame;
+            a->info->left = uv->left;
+            a->info->right = uv->right;
+            a->info->top = uv->top;
+            a->info->bottom = uv->bottom;
+
+            // enough frame changed occured so stop playing
+            if (a->stopAfter != 0 && a->_frameChanges > a->stopAfter)
+                a->_playing = false;
         }
-
-        float deltaTime = t->gameTime - a->lastFrameTime;
-        int deltaFrames = (int)(deltaTime / a->realSpeed);
-
-        // it't to early to change frames
-        if (abs(deltaFrames) < 1)
-            return;
-
-        a->currentFrame += deltaFrames;
-
-        // frame changed so u[date last change time
-        a->lastFrameTime = t->gameTime;
-
-        // this mod and if statement provide bidirectional mod for range "0 ~ maxFrames"
-        a->currentFrame %= a->frameCount;
-        if (a->currentFrame < 0)
-            a->currentFrame = a->frameCount + a->currentFrame;
-
-        uv* uv = a->uv + a->currentFrame;
-        a->info->left = uv->left;
-        a->info->right = uv->right;
-        a->info->top = uv->top;
-        a->info->bottom = uv->bottom;
-    }
-
-    void stopAnimation(animation* a)
-    {
-        a->realSpeed = 0;
     }
 
     struct uvSplitInfo
@@ -2019,15 +2161,15 @@ namespace vi::graphics
         }
     }
 
-    void updateTextTransform(text* t)
+    void updateTextTransform(text* t, sprite* s)
     {
         if (t->str[0] == 0)
             return;
 
         const char* it = t->str;
-        drawInfo* d = t->info;
-        float x = t->info->x + t->info->sx + t->horizontalSpace;
-        float y = t->info->y;
+        sprite* d = s;
+        float x = s->x + s->sx + t->horizontalSpace;
+        float y = s->y;
 
         d->left = t->uv[*it - ' '].left;
         d->top = t->uv[*it - ' '].top;
@@ -2046,8 +2188,8 @@ namespace vi::graphics
 
             if (*it == '\n')
             {
-                x = t->info->x;
-                y += t->info->sy + t->verticalSpace;
+                x = s->x;
+                y += s->sy + t->verticalSpace;
                 it++;
                 continue;
             }
@@ -2057,33 +2199,53 @@ namespace vi::graphics
             d->top = glyph.top;
             d->right = glyph.right;
             d->bottom = glyph.bottom;
-            d->sx = t->info->sx;
-            d->sy = t->info->sy;
+            d->sx = s->sx;
+            d->sy = s->sy;
             d->x = x;
             d->y = y;
             d->textureIndex = t->textureIndex;
-            d->ox = t->info->ox;
-            d->oy = t->info->oy;
+            d->ox = s->ox;
+            d->oy = s->oy;
 
             it++;
             d++;
-            x += t->info->sx + t->horizontalSpace;            
+            x += s->sx + t->horizontalSpace;            
         }
+    }
+
+    void updateDynamic(sprite* s, dynamic* d, time::timer* t)
+    {
+        float currentTime = time::getGameTimeSec(t);
+        float delta = currentTime - d->_lastUpdate;
+        d->_lastUpdate = currentTime;
+
+        d->velx += d->accx * delta;
+        s->x += d->velx * delta;
+        d->vely += d->accy * delta;
+        s->y += d->vely * delta;
+        d->velz += d->accz * delta;
+        s->z += d->velz * delta;
+        d->velrot += d->accrot * delta;
+        s->rot += d->velrot * delta;
+        d->velsx += d->accsx * delta;
+        s->sx += d->velsx * delta;
+        d->velsy += d->accsy * delta;
+        s->sy += d->velsy * delta;
     }
 }
 
 namespace vi::graphics::transform
 {
-    void setPixelScale(renderer* g, camera* c, uint width, uint height, drawInfo* t)
+    void setPixelScale(renderer* g, camera* c, uint width, uint height, sprite* s)
     {
-        t->sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
-        t->sy = 2.0f / g->swapChainExtent.height / c->scale * height;
+        s->sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
+        s->sy = 2.0f / g->swapChainExtent.height / c->scale * height;
     }
 
-    void setScreenPos(renderer* g, camera* c, uint x, uint y, drawInfo* t)
+    void setScreenPos(renderer* g, camera* c, uint x, uint y, sprite* s)
     {
-        t->x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
-        t->y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
+        s->x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
+        s->y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
     }
 
     // puts width and height in world coordinates of 1px in f[0] and f[1]
@@ -2091,6 +2253,58 @@ namespace vi::graphics::transform
     {
         f[0] = 2.0f / g->swapChainExtent.width / c->scale * c->aspectRatio;
         f[1] = 2.0f / g->swapChainExtent.height / c->scale;
+    }
+
+    void setUvFromPixels(sprite* s, float pixelOffsetX, float pixelOffsetY, float pixelWidth,
+        float pixelHeight, float pixelTextureWidth, float pixelTextureHeight)
+    {
+        s->left = pixelOffsetX / pixelTextureWidth;
+        s->top = pixelOffsetY / pixelTextureHeight;
+        s->right = s->left + pixelWidth / pixelTextureWidth;
+        s->bottom = s->top + pixelHeight / pixelTextureHeight;
+    }
+
+    float mag2D(float x, float y)
+    {
+        return sqrtf(x * x + y * y);
+    }
+
+    float mag2Dsq(float x, float y)
+    {
+        return x * x + y * y;
+    }
+
+    void norm2D(float x, float y, float* dstx, float* dsty)
+    {
+        float mag = mag2D(x, y);
+        *dstx = x / mag;
+        *dsty = y / mag;
+    }
+
+    float distance2D(float x1, float y1, float x2, float y2)
+    {
+        return sqrtf((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    }
+
+    float distance2Dsq(float x1, float y1, float x2, float y2)
+    {
+        return (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+    }
+
+    // sets velx, vely in such way that object will move from start to dst at speed 'speed'
+    void moveTo(dynamic* di, float startx, float starty, float dstx, float dsty, float speed)
+    {
+        float dx = dstx - startx;
+        float dy = dsty - starty;
+        norm2D(dx, dy, &di->velx, &di->vely);
+    }
+
+    // calculates the angle when (x,y) points at (targetx,targety)
+    float lookAt(dynamic* di, float x, float y, float targetx, float targety)
+    {
+        // not implemented
+        assert(false);
+        return 0;
     }
 }
 
