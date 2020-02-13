@@ -519,7 +519,7 @@ namespace vi::graphics
     // for now speed must be non negative
     struct animation
     {
-        sprite* info;
+        sprite* s;
         uv* uv;
         float speed;
         uint frameCount;
@@ -2033,7 +2033,7 @@ namespace vi::graphics
     // 'stopAfter' stop animation after that many frame changes, 0 = never stop
     void initAnimation(animation* a, sprite* s, uv* uv, uint frameCount, float secondsPerFrame, uint stopAfter)
     {
-        a->info = s;
+        a->s = s;
         a->uv = uv;
         a->speed = secondsPerFrame;
         a->frameCount = frameCount;
@@ -2043,24 +2043,54 @@ namespace vi::graphics
         a->_elapsedTime = 0;
         a->_playing = false;
         a->_frameChanges = 0;
+        // update uv to the current frame
+        a->s->left = a->uv[a->currentFrame].left;
+        a->s->top = a->uv[a->currentFrame].top;
+        a->s->right = a->uv[a->currentFrame].right;
+        a->s->bottom = a->uv[a->currentFrame].bottom;
     }
 
     // make 'updateAnimation' animate frames
     void playAnimation(animation* a, time::timer* t)
     {
+        if (a->_playing)
+            return;
+
         a->_playing = true;
         a->_lastUpdate = time::getGameTimeSec(t);
         // update uv to the current frame
-        a->info->left = a->uv[a->currentFrame].left;
-        a->info->top = a->uv[a->currentFrame].top;
-        a->info->right = a->uv[a->currentFrame].right;
-        a->info->bottom = a->uv[a->currentFrame].bottom;
+        a->s->left = a->uv[a->currentFrame].left;
+        a->s->top = a->uv[a->currentFrame].top;
+        a->s->right = a->uv[a->currentFrame].right;
+        a->s->bottom = a->uv[a->currentFrame].bottom;
     }
 
     // animation will stop and 'updateAnimation' will no longer animate frames
     void pauseAnimation(animation* a)
     {
         a->_playing = false;
+    }
+
+    // stop and reset animation so it can be played from the beginning
+    void resetAnimation(animation* a)
+    {
+        a->currentFrame = 0;
+        a->frameChanged = false;
+        a->_elapsedTime = 0;
+        a->_playing = false;
+        a->_frameChanges = 0;
+
+    }
+
+    // stops playing 'from' starts playing 'to'
+    // if 'from' is not playing ot 'to' is playing then nothing happens
+    void switchAnimation(animation* from, animation* to, time::timer* t)
+    {
+        if (!from->_playing || to->_playing)
+            return;
+
+        resetAnimation(from);
+        playAnimation(to, t);
     }
 
     // this is true if last 'updateAnimation' changed 'currentFrame'
@@ -2113,10 +2143,10 @@ namespace vi::graphics
 
             // update uv
             uv* uv = a->uv + a->currentFrame;
-            a->info->left = uv->left;
-            a->info->right = uv->right;
-            a->info->top = uv->top;
-            a->info->bottom = uv->bottom;
+            a->s->left = uv->left;
+            a->s->right = uv->right;
+            a->s->top = uv->top;
+            a->s->bottom = uv->bottom;
 
             // enough frame changed occured so stop playing
             if (a->stopAfter != 0 && a->_frameChanges > a->stopAfter)
@@ -2219,7 +2249,7 @@ namespace vi::graphics
         }
     }
 
-    void updateDynamic(sprite* s, dynamic* d, time::timer* t)
+    void updateDynamicSprite(sprite* s, dynamic* d, time::timer* t)
     {
         float currentTime = time::getGameTimeSec(t);
         float delta = currentTime - d->_lastUpdate;
@@ -2303,6 +2333,8 @@ namespace vi::graphics::transform
         float dx = dstx - startx;
         float dy = dsty - starty;
         norm2D(dx, dy, &di->velx, &di->vely);
+        di->velx *= speed;
+        di->vely *= speed;
     }
 
     // calculates the angle when (x,y) points at (targetx,targety)

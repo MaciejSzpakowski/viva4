@@ -11,9 +11,194 @@ namespace examples
         vi::viva v;
     };
 
-    void keyboard()
+    void mouse()
     {
+    }
 
+    void text()
+    {
+    }
+
+    void camera()
+    {
+    }
+
+    void multipleTextures()
+    {
+    }
+
+    // there a lot of noise to make it more interesting
+    // state management is done in crapy way just to have quick and dirty example
+    // relevant parts are: updateKeyboardState, isKeyDown, 
+    // animationFlipHorizontally, switchAnimation, moveTo
+    void keyboardMultipleAnimationsMath()
+    {
+        // this variable is kept to keep direction for elf
+        // so when it changes, animation is flipped
+        float elfDirection = 1;
+        float monsterDirection = 1;
+
+        auto loop = [&elfDirection,&monsterDirection](gameData* _gameData)
+        {
+            // update timer first
+            vi::time::updateTimer(&_gameData->v.timer);
+            // this is not the best way to move objects around but that's not the point of this example
+            float frameTime = vi::time::getTickTimeSec(&_gameData->v.timer);
+            // updating keyboard state once a frame is a good idea
+            vi::input::updateKeyboardState(&_gameData->v.keyboard);
+            // animation management is non trivial
+            // this is simple state variable to indicate two states: walk and idle
+            // it's used to switch animation between walk and idle
+            bool elfIsMoving = false;
+
+            // check for key presses
+            // if any is down then elf will move and is moving state will be true
+            if (vi::input::isKeyDown(&_gameData->v.keyboard, 'A'))
+            {
+                // direction changed, flip elf animations
+                if (elfDirection > 0)
+                {
+                    elfDirection = -1;
+                    vi::graphics::animationFlipHorizontally(_gameData->ani);
+                    vi::graphics::animationFlipHorizontally(_gameData->ani + 1);
+                }
+
+                elfIsMoving = true;
+                _gameData->sprites[0].x -= frameTime;
+            }
+            else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'D'))
+            {
+                // direction changed, flip elf animations
+                if (elfDirection < 0)
+                {
+                    elfDirection = 1;
+                    vi::graphics::animationFlipHorizontally(_gameData->ani);
+                    vi::graphics::animationFlipHorizontally(_gameData->ani + 1);
+                }
+
+                elfIsMoving = true;
+                _gameData->sprites[0].x += frameTime;
+            }
+
+            if (vi::input::isKeyDown(&_gameData->v.keyboard, 'W'))
+            {
+                elfIsMoving = true;
+                _gameData->sprites[0].y -= frameTime;
+            }
+            else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'S'))
+            {
+                elfIsMoving = true;
+                _gameData->sprites[0].y += frameTime;
+            }
+
+            float distance = vi::graphics::transform::distance2Dsq(
+                _gameData->sprites[0].x, _gameData->sprites[0].y,
+                _gameData->sprites[1].x, _gameData->sprites[1].y);
+
+            // if monster is far enough then start moving towards elf
+            if (distance > 0.31f * 0.31f)
+            {
+                vi::graphics::transform::moveTo(_gameData->dyn, _gameData->sprites[1].x, _gameData->sprites[1].y,
+                    _gameData->sprites[0].x, _gameData->sprites[0].y, 0.9f);
+                // switch from idle to walk
+                vi::graphics::switchAnimation(_gameData->ani + 3, _gameData->ani + 2, &_gameData->v.timer);
+
+                if (monsterDirection > 0 && _gameData->dyn[0].velx < 0)
+                {
+                    monsterDirection = -1;
+                    vi::graphics::animationFlipHorizontally(_gameData->ani + 2);
+                    vi::graphics::animationFlipHorizontally(_gameData->ani + 3);
+                }
+                else if(monsterDirection < 0 && _gameData->dyn[0].velx > 0)
+                {
+                    monsterDirection = 1;
+                    vi::graphics::animationFlipHorizontally(_gameData->ani + 2);
+                    vi::graphics::animationFlipHorizontally(_gameData->ani + 3);
+                }
+            }
+
+            // if monster is close enough the stop moving
+            // this number is smaller than to start moving
+            // because weird things might happen at the border
+            if(distance < 0.29f * 0.29f)
+            {
+                // stop moving
+                _gameData->dyn[0].velx = 0;
+                _gameData->dyn[0].vely = 0;
+                // switch from walk to idle
+                vi::graphics::switchAnimation(_gameData->ani + 2, _gameData->ani + 3, &_gameData->v.timer);
+            }
+
+            vi::graphics::updateDynamicSprite(_gameData->sprites + 1, _gameData->dyn, &_gameData->v.timer);
+
+            // 'switchAnimation' is the most convenient way (as of writing this) to switch animation
+            // 'switchAnimation' does nothing if correct animation is already playing
+            // i.e. you dont have to check if state actually changed
+            if (elfIsMoving)
+                vi::graphics::switchAnimation(_gameData->ani + 1, _gameData->ani, &_gameData->v.timer);
+            else
+                vi::graphics::switchAnimation(_gameData->ani, _gameData->ani + 1, &_gameData->v.timer);
+
+            // dont forget to update all animation, wheter they playing or not, doesnt matter
+            vi::graphics::updateAnimation(&_gameData->v.timer, _gameData->ani);
+            vi::graphics::updateAnimation(&_gameData->v.timer, _gameData->ani + 1);
+            vi::graphics::updateAnimation(&_gameData->v.timer, _gameData->ani + 2);
+            vi::graphics::updateAnimation(&_gameData->v.timer, _gameData->ani + 3);
+
+            vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 100, &_gameData->v.camera);
+        };
+
+        gameData data = {};
+        vi::vivaInfo info = {};
+        info.width = 960;
+        info.height = 540;
+        info.title = "Keyboard";
+        vi::initViva(&data.v, &info);
+
+        // init textures
+        vi::graphics::createTextureFromFile(&data.v.graphics, "0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
+
+        // init sprites
+        vi::graphics::initSprite(data.sprites, data.tex[0].index);
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 4, 28 * 4, data.sprites);
+        vi::graphics::initSprite(data.sprites + 1, data.tex[0].index);
+        data.sprites[1].x = 1;
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 4, 20 * 4, data.sprites + 1);
+
+        // init animations
+        vi::graphics::uv elfWalkAni[4];
+        vi::graphics::uvSplitInfo usi1 = { 512,512,192,4,16,28,4,4 };
+        vi::graphics::uvSplit(&usi1, elfWalkAni);
+        vi::graphics::initAnimation(data.ani, data.sprites, elfWalkAni, 4, 0.09f, 0);
+
+        vi::graphics::uv elfIdleAni[4];
+        vi::graphics::uvSplitInfo usi2 = { 512,512,128,4,16,28,4,4 };
+        vi::graphics::uvSplit(&usi2, elfIdleAni);
+        vi::graphics::initAnimation(data.ani + 1, data.sprites, elfIdleAni, 4, 0.1f, 0);
+
+        vi::graphics::uv monsterWalkAni[4];
+        vi::graphics::uvSplitInfo usi3 = { 512,512,432,204,16,20,4,4 };
+        vi::graphics::uvSplit(&usi3, monsterWalkAni);
+        vi::graphics::initAnimation(data.ani + 2, data.sprites + 1, monsterWalkAni, 4, 0.09f, 0);
+
+        vi::graphics::uv monsterIdleAni[4];
+        vi::graphics::uvSplitInfo usi4 = { 512,512,368,204,16,20,4,4 };
+        vi::graphics::uvSplit(&usi4, monsterIdleAni);
+        vi::graphics::initAnimation(data.ani + 3, data.sprites + 1, monsterIdleAni, 4, 0.1f, 0);
+
+        // dynamic for monster
+        data.dyn[0] = {};
+
+        // start playing idle animation
+        vi::graphics::playAnimation(data.ani + 1, &data.v.timer);
+        vi::graphics::playAnimation(data.ani + 3, &data.v.timer);
+
+        vi::system::loop<gameData*>(loop, &data);
+
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex);
+        vi::graphics::destroyGraphics(&data.v.graphics);
+        vi::system::destroyWindow(&data.v.window);
     }
 
     void timerMotionAnimation()
@@ -24,14 +209,14 @@ namespace examples
             vi::time::updateTimer(&_gameData->v.timer);
 
             // have to update every dynamic object to take effect
-            vi::graphics::updateDynamic(_gameData->sprites, _gameData->dyn, &_gameData->v.timer);
+            vi::graphics::updateDynamicSprite(_gameData->sprites, _gameData->dyn, &_gameData->v.timer);
 
             // manually update some properties scaled by timer
             _gameData->sprites[1].sx = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) * 10) / 2 + 1;
             _gameData->sprites[2].sy = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) * 7) / 2 + 5;
             _gameData->sprites[3].r = sinf(vi::time::getGameTimeSec(&_gameData->v.timer)) / 4 + 0.75f;
-            _gameData->sprites[3].g = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI) / 4 + +0.75f;
-            _gameData->sprites[3].b = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI * 2) / 4 + +0.75f;
+            _gameData->sprites[3].g = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI) / 4 + 0.75f;
+            _gameData->sprites[3].b = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI * 2) / 4 + 0.75f;
 
             // must update animations
             vi::graphics::updateAnimation(&_gameData->v.timer, _gameData->ani);
@@ -201,15 +386,16 @@ namespace examples
 
         // once you are done creating texures they have to be pushed
         // it is relatively expensive step so that's why it has to be done explicitly by programmer
-        // don't do it to often
+        // don't do it too often
         // for example do it once per level/game
         // texture that are not pushed cannot be used in draw step
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
-        // initialize one object for drawing
+        // initialize one sprite for drawing
         // CRUCIAL FIELDS
         // "left,right,top,bottom" is for UV
         //         if uninitialized then they gonna be 0,0,0,0 so segment of nothing will be used
+        //         init function will initialize to 0,0,1,1 which means use the whole texture
         // "textureIndex" when textures are pushed, each texture gets and index, use that index
         // "sx,sy" is scale, use something other than 0,0 because it means that sprite is infinitely small
         // "r,g,b" are color coefficients, texel is multiplied by them so use 1,1,1 if you want to use texel as it is
@@ -233,7 +419,8 @@ namespace examples
     {
         //basicSprite();
         //moreSprites();
-        timerMotionAnimation();
+        //timerMotionAnimation();
+        keyboardMultipleAnimationsMath();
         return 0;
     }
 }
