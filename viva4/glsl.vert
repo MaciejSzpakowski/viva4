@@ -49,16 +49,17 @@ layout(location = 1) out vec2 fragTexCoord;
 layout(location = 2) out flat int textureIndex;
 
 void main() {
-	float width = 800;
-	float height = 600;
 	transform t = ubo.t[gl_InstanceIndex];
 	vec2 uv[4] = vec2[](vec2(t.left, t.top),vec2(t.left, t.bottom),vec2(t.right, t.top),vec2(t.right, t.bottom));
 	// camera
+    // that is correct camera transformation
+    // includes aspect ratio adjustment and it FIRST moves camera to postion and then scales
+    // so when zooming, it always zooms around the center of the screen
 	mat4 cam = mat4(
 		1/ubo.cam.aspectRatio * ubo.cam.scale, 0, 0, 0,
 		0, ubo.cam.scale, 0, 0,
 		0, 0, 1, 0,
-		0, 0, 0, 1
+		1/ubo.cam.aspectRatio * ubo.cam.scale * -ubo.cam.x, ubo.cam.scale * -ubo.cam.y, 0, 1
 	);
 	// origin
 	mat4 ori = mat4(

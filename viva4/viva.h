@@ -2328,17 +2328,17 @@ namespace vi::graphics::transform
     }
 
     // sets velx, vely in such way that object will move from start to dst at speed 'speed'
-    void moveTo(dynamic* di, float startx, float starty, float dstx, float dsty, float speed)
+    void moveTo(float startx, float starty, float dstx, float dsty, float speed, float* velx, float* vely)
     {
         float dx = dstx - startx;
         float dy = dsty - starty;
-        norm2D(dx, dy, &di->velx, &di->vely);
-        di->velx *= speed;
-        di->vely *= speed;
+        norm2D(dx, dy, velx, vely);
+        *velx *= speed;
+        *vely *= speed;
     }
 
     // calculates the angle when (x,y) points at (targetx,targety)
-    float lookAt(dynamic* di, float x, float y, float targetx, float targety)
+    float lookAt(float x, float y, float targetx, float targety, float* rot)
     {
         // not implemented
         assert(false);

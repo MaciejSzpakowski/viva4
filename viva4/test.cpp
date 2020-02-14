@@ -21,12 +21,130 @@ namespace examples
 
     void camera()
     {
+        auto loop = [](gameData* _gameData)
+        {
+            vi::time::updateTimer(&_gameData->v.timer);
+            vi::input::updateKeyboardState(&_gameData->v.keyboard);
+            float frameTime = vi::time::getTickTimeSec(&_gameData->v.timer);
+
+            if (vi::input::isKeyDown(&_gameData->v.keyboard, 'A'))
+            {
+                _gameData->v.camera.x -= frameTime;
+            }
+            else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'D'))
+            {
+                _gameData->v.camera.x += frameTime;
+            }
+
+            if (vi::input::isKeyDown(&_gameData->v.keyboard, 'W'))
+            {
+                _gameData->v.camera.y -= frameTime;
+            }
+            else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'S'))
+            {
+                _gameData->v.camera.y += frameTime;
+            }
+
+            if (vi::input::isKeyDown(&_gameData->v.keyboard, 'Q'))
+            {
+                _gameData->v.camera.scale *= 1 - frameTime * .3f;
+            }
+            else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'E'))
+            {
+                _gameData->v.camera.scale *= 1 + frameTime * .3f;
+            }
+
+            vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 10, &_gameData->v.camera);
+        };
+
+        gameData data = {};
+        vi::vivaInfo info = {};
+        info.width = 960;
+        info.height = 540;
+        info.title = "Camera";
+        vi::initViva(&data.v, &info);
+
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
+
+        vi::graphics::initSprite(data.sprites, data.tex[0].index);
+        data.sprites[0].x = -1;
+        data.sprites[0].y = -1;
+        vi::graphics::transform::setUvFromPixels(data.sprites, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites);
+
+        vi::graphics::initSprite(data.sprites + 1, data.tex[0].index);
+        data.sprites[1].x = 1;
+        data.sprites[1].y = -1;
+        vi::graphics::transform::setUvFromPixels(data.sprites + 1, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 1);
+
+        vi::graphics::initSprite(data.sprites + 2, data.tex[0].index);
+        data.sprites[2].x = -1;
+        data.sprites[2].y = 1;
+        vi::graphics::transform::setUvFromPixels(data.sprites + 2, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 2);
+
+        vi::graphics::initSprite(data.sprites + 3, data.tex[0].index);
+        data.sprites[3].x = 1;
+        data.sprites[3].y = 1;
+        vi::graphics::transform::setUvFromPixels(data.sprites + 3, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 3);
+
+        vi::graphics::initSprite(data.sprites + 4, data.tex[0].index);
+        vi::graphics::transform::setUvFromPixels(data.sprites + 4, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 4);
+
+        vi::system::loop<gameData*>(loop, &data);
+
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex);
+        vi::graphics::destroyGraphics(&data.v.graphics);
+        vi::system::destroyWindow(&data.v.window);
     }
 
+    // move camera with WSAD zoom Q/E
+    // just to make sure they still work
     void multipleTextures()
     {
+        auto loop = [](gameData* _gameData)
+        {
+            vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 3, &_gameData->v.camera);
+        };
+
+        gameData data = {};
+        vi::vivaInfo info = {};
+        info.width = 960;
+        info.height = 540;
+        info.title = "Multiple textures";
+        vi::initViva(&data.v, &info);
+        data.v.camera.scale = 0.5f;
+
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/bk.png", data.tex);
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/elf.png", data.tex + 1);
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/sm.png", data.tex + 2);
+
+        vi::graphics::pushTextures(&data.v.graphics, data.tex, 3);
+
+        vi::graphics::initSprite(data.sprites, data.tex[0].index);
+        data.sprites[0].x = -1;
+        data.sprites[0].y = 1;
+        vi::graphics::initSprite(data.sprites + 1, data.tex[1].index);
+        data.sprites[1].x = -1;
+        data.sprites[1].y = -1;
+        vi::graphics::initSprite(data.sprites + 2, data.tex[2].index);
+        data.sprites[2].x = 1;
+        data.sprites[2].y = -1;
+
+        vi::system::loop<gameData*>(loop, &data);
+
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex);
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex + 1);
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex + 2);
+        vi::graphics::destroyGraphics(&data.v.graphics);
+        vi::system::destroyWindow(&data.v.window);
     }
 
+    // move with WSAD
     // there a lot of noise to make it more interesting
     // state management is done in crapy way just to have quick and dirty example
     // relevant parts are: updateKeyboardState, isKeyDown, 
@@ -98,8 +216,9 @@ namespace examples
             // if monster is far enough then start moving towards elf
             if (distance > 0.31f * 0.31f)
             {
-                vi::graphics::transform::moveTo(_gameData->dyn, _gameData->sprites[1].x, _gameData->sprites[1].y,
-                    _gameData->sprites[0].x, _gameData->sprites[0].y, 0.9f);
+                vi::graphics::transform::moveTo(_gameData->sprites[1].x, _gameData->sprites[1].y,
+                    _gameData->sprites[0].x, _gameData->sprites[0].y, 0.9f, 
+                    &_gameData->dyn[0].velx, &_gameData->dyn[0].vely);
                 // switch from idle to walk
                 vi::graphics::switchAnimation(_gameData->ani + 3, _gameData->ani + 2, &_gameData->v.timer);
 
@@ -156,7 +275,7 @@ namespace examples
         vi::initViva(&data.v, &info);
 
         // init textures
-        vi::graphics::createTextureFromFile(&data.v.graphics, "0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/0x72_DungeonTilesetII_v1.png", data.tex);
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
         // init sprites
@@ -232,7 +351,7 @@ namespace examples
         vi::initViva(&data.v, &info);
         data.v.camera.scale = 0.1f;
 
-        vi::graphics::createTextureFromFile(&data.v.graphics, "0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/0x72_DungeonTilesetII_v1.png", data.tex);
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
 #define MAKE_SPRITE(__n,__x,__y,__rot,__sx,__sy,__r,__g,__b) data.sprites[__n] = {}; \
@@ -301,7 +420,7 @@ namespace examples
         vi::initViva(&data.v, &info);
         data.v.camera.scale = 0.1f;
 
-        vi::graphics::createTextureFromFile(&data.v.graphics, "0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/0x72_DungeonTilesetII_v1.png", data.tex);
 
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
@@ -382,7 +501,7 @@ namespace examples
 
         // create some texture
         // this should be done once per level/game because resource creation is expensive
-        vi::graphics::createTextureFromFile(&data.v.graphics, "0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/0x72_DungeonTilesetII_v1.png", data.tex);
 
         // once you are done creating texures they have to be pushed
         // it is relatively expensive step so that's why it has to be done explicitly by programmer
@@ -417,10 +536,12 @@ namespace examples
 
     int main()
     {
-        //basicSprite();
-        //moreSprites();
-        //timerMotionAnimation();
+        basicSprite();
+        moreSprites();
+        timerMotionAnimation();
         keyboardMultipleAnimationsMath();
+        multipleTextures();
+        camera();
         return 0;
     }
 }
