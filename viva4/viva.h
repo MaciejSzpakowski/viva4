@@ -427,11 +427,20 @@ namespace vi::graphics
         VkDescriptorPool descriptorPool;
 	};
 
+    struct vector3
+    {
+        float x, y, z;
+    };
+
+    struct vector2
+    {
+        float x, y;
+    };
 
     // WARNING !!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     // you updating something ? update shaders as well
     // struct passed to uniform buffer must be multiple of 16bytes
-    struct sprite
+    struct sprite1
     {
         // pos x
         float x;
@@ -456,7 +465,7 @@ namespace vi::graphics
         // 16 byte
 
         // which texture
-        int textureIndex;
+        uint textureIndex;
         // uv left
         float left;
         // uv top
@@ -483,6 +492,33 @@ namespace vi::graphics
         //byte padding[15];
     };
 
+    struct color
+    {
+        float r, g, b;
+    };
+
+    struct uv
+    {
+        float left, top, right, bottom;
+    };
+
+    struct sprite2
+    {
+        vector3 pos;
+        vector2 scale;
+        float rot;
+        vector2 origin;
+        uint textureIndex;
+        uv uv1;
+        color col;
+    };
+
+    union sprite
+    {
+        sprite1 s1;
+        sprite2 s2;
+    };
+
     struct dynamic
     {
         float velx, vely, velz;
@@ -496,14 +532,6 @@ namespace vi::graphics
         // grow acceleration
         float accsx, accsy;
         float _lastUpdate;
-    };
-
-    struct uv
-    {
-        float left;
-        float top;
-        float right;
-        float bottom;
     };
 
     struct texture
@@ -543,9 +571,8 @@ namespace vi::graphics
     struct text
     {
         font* font;
+        sprite* s;
         const char* str;
-        uint textureIndex;
-        uv* uv;
         float horizontalSpace;
         float verticalSpace;
     };
@@ -2018,16 +2045,10 @@ namespace vi::graphics
     void initSprite(sprite* s, uint textureIndex)
     {
         *s = {};
-        s->textureIndex = textureIndex;
-        s->r = 1;
-        s->g = 1;
-        s->b = 1;
-        s->sx = 1;
-        s->sy = 1;
-        s->left = 0;
-        s->top = 0;
-        s->right = 1;
-        s->bottom = 1;
+        s->s2.textureIndex = textureIndex;
+        s->s2.col = { 1,1,1 };
+        s->s2.scale = { 1,1 };
+        s->s2.uv1 = { 0,0,1,1 };
     }
     
     // 'stopAfter' stop animation after that many frame changes, 0 = never stop
@@ -2044,10 +2065,7 @@ namespace vi::graphics
         a->_playing = false;
         a->_frameChanges = 0;
         // update uv to the current frame
-        a->s->left = a->uv[a->currentFrame].left;
-        a->s->top = a->uv[a->currentFrame].top;
-        a->s->right = a->uv[a->currentFrame].right;
-        a->s->bottom = a->uv[a->currentFrame].bottom;
+        a->s->s2.uv1 = a->uv[a->currentFrame];
     }
 
     // make 'updateAnimation' animate frames
@@ -2059,10 +2077,7 @@ namespace vi::graphics
         a->_playing = true;
         a->_lastUpdate = time::getGameTimeSec(t);
         // update uv to the current frame
-        a->s->left = a->uv[a->currentFrame].left;
-        a->s->top = a->uv[a->currentFrame].top;
-        a->s->right = a->uv[a->currentFrame].right;
-        a->s->bottom = a->uv[a->currentFrame].bottom;
+        a->s->s2.uv1 = { a->uv[a->currentFrame] };
     }
 
     // animation will stop and 'updateAnimation' will no longer animate frames
@@ -2143,10 +2158,7 @@ namespace vi::graphics
 
             // update uv
             uv* uv = a->uv + a->currentFrame;
-            a->s->left = uv->left;
-            a->s->right = uv->right;
-            a->s->top = uv->top;
-            a->s->bottom = uv->bottom;
+            a->s->s2.uv1 = *uv;
 
             // enough frame changed occured so stop playing
             if (a->stopAfter != 0 && a->_frameChanges > a->stopAfter)
@@ -2197,24 +2209,17 @@ namespace vi::graphics
         }
     }
 
-    void updateTextTransform(text* t, sprite* s)
+    void updateTextTransform(text* t)
     {
         if (t->str[0] == 0)
             return;
 
         const char* it = t->str;
-        sprite* d = s;
-        float x = s->x + s->sx + t->horizontalSpace;
-        float y = s->y;
-
-        d->left = t->uv[*it - ' '].left;
-        d->top = t->uv[*it - ' '].top;
-        d->right = t->uv[*it - ' '].right;
-        d->bottom = t->uv[*it - ' '].bottom;
-        d->textureIndex = t->textureIndex;
-
-        it++;
-        d++;
+        sprite* s = t->s;
+        uv* uv1 = t->font->uv;
+        float x = s->s1.x;
+        float y = s->s1.y;
+        uint textureIndex = t->font->tex->index;
 
         while (true)
         {
@@ -2224,28 +2229,23 @@ namespace vi::graphics
 
             if (*it == '\n')
             {
-                x = s->x;
-                y += s->sy + t->verticalSpace;
+                x = t->s->s1.x;
+                y += t->s->s1.sy + t->verticalSpace;
                 it++;
                 continue;
             }
 
-            uv glyph = t->uv[*it - ' '];
-            d->left = glyph.left;
-            d->top = glyph.top;
-            d->right = glyph.right;
-            d->bottom = glyph.bottom;
-            d->sx = s->sx;
-            d->sy = s->sy;
-            d->x = x;
-            d->y = y;
-            d->textureIndex = t->textureIndex;
-            d->ox = s->ox;
-            d->oy = s->oy;
+            s->s2.uv1 = uv1[*it - ' '];
+            s->s1.x = x;
+            s->s1.y = y;
+            s->s1.textureIndex = textureIndex;
+            // set scale and origin equal to the first sprite in the set
+            s->s2.scale = t->s->s2.scale;
+            s->s2.origin = t->s->s2.origin;
 
             it++;
-            d++;
-            x += s->sx + t->horizontalSpace;            
+            s++;
+            x += t->s->s1.sx + t->horizontalSpace;
         }
     }
 
@@ -2256,17 +2256,17 @@ namespace vi::graphics
         d->_lastUpdate = currentTime;
 
         d->velx += d->accx * delta;
-        s->x += d->velx * delta;
+        s->s1.x += d->velx * delta;
         d->vely += d->accy * delta;
-        s->y += d->vely * delta;
+        s->s1.y += d->vely * delta;
         d->velz += d->accz * delta;
-        s->z += d->velz * delta;
+        s->s1.z += d->velz * delta;
         d->velrot += d->accrot * delta;
-        s->rot += d->velrot * delta;
+        s->s1.rot += d->velrot * delta;
         d->velsx += d->accsx * delta;
-        s->sx += d->velsx * delta;
+        s->s1.sx += d->velsx * delta;
         d->velsy += d->accsy * delta;
-        s->sy += d->velsy * delta;
+        s->s1.sy += d->velsy * delta;
     }
 }
 
@@ -2274,14 +2274,14 @@ namespace vi::graphics::transform
 {
     void setPixelScale(renderer* g, camera* c, uint width, uint height, sprite* s)
     {
-        s->sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
-        s->sy = 2.0f / g->swapChainExtent.height / c->scale * height;
+        s->s1.sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
+        s->s1.sy = 2.0f / g->swapChainExtent.height / c->scale * height;
     }
 
     void setScreenPos(renderer* g, camera* c, uint x, uint y, sprite* s)
     {
-        s->x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
-        s->y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
+        s->s1.x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
+        s->s1.y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
     }
 
     // puts width and height in world coordinates of 1px in f[0] and f[1]
@@ -2294,10 +2294,10 @@ namespace vi::graphics::transform
     void setUvFromPixels(sprite* s, float pixelOffsetX, float pixelOffsetY, float pixelWidth,
         float pixelHeight, float pixelTextureWidth, float pixelTextureHeight)
     {
-        s->left = pixelOffsetX / pixelTextureWidth;
-        s->top = pixelOffsetY / pixelTextureHeight;
-        s->right = s->left + pixelWidth / pixelTextureWidth;
-        s->bottom = s->top + pixelHeight / pixelTextureHeight;
+        s->s1.left = pixelOffsetX / pixelTextureWidth;
+        s->s1.top = pixelOffsetY / pixelTextureHeight;
+        s->s1.right = s->s1.left + pixelWidth / pixelTextureWidth;
+        s->s1.bottom = s->s1.top + pixelHeight / pixelTextureHeight;
     }
 
     float mag2D(float x, float y)

@@ -7,6 +7,7 @@ namespace examples
         vi::graphics::texture tex[10];
         vi::graphics::dynamic dyn[50];
         vi::graphics::sprite sprites[50];
+        vi::graphics::sprite* moreSprites;
         vi::graphics::animation ani[50];
         vi::viva v;
     };
@@ -17,8 +18,47 @@ namespace examples
 
     void text()
     {
+        auto loop = [](gameData* _gameData)
+        {
+            vi::graphics::drawScene(&_gameData->v.graphics, _gameData->moreSprites, 50, &_gameData->v.camera);
+        };
+
+        gameData data = {};
+        vi::vivaInfo info = {};
+        info.width = 960;
+        info.height = 540;
+        info.title = "Text";
+        vi::initViva(&data.v, &info);
+
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/font1.png", data.tex);
+        vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
+
+        data.moreSprites = new vi::graphics::sprite[1000];
+        memset(data.moreSprites, 0, sizeof(vi::graphics::sprite) * 1000);
+        const char* str = "Short text that\ncontains new line character";
+        vi::graphics::font font1 = { data.tex };
+        vi::graphics::text text1 = { &font1, data.moreSprites, str, 0, 0 };
+        vi::graphics::uvSplitInfo usi = {256,36,0,0,8,12,32,96};
+        vi::graphics::uvSplit(&usi, font1.uv);
+
+        data.moreSprites[0].s2.pos = { -1, -0.5f };
+        vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16, 24, data.moreSprites);
+
+        vi::graphics::updateTextTransform(&text1);
+
+        for (uint i = 0; i < strlen(str); i++)
+            data.moreSprites[i].s2.col = { 0,0,0 };
+        
+        vi::system::loop<gameData*>(loop, &data);
+
+        delete data.moreSprites;
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex);
+        vi::graphics::destroyGraphics(&data.v.graphics);
+        vi::system::destroyWindow(&data.v.window);
     }
 
+    // move camera with WSAD zoom Q/E
+    // zooming should be towards the center of the screen
     void camera()
     {
         auto loop = [](gameData* _gameData)
@@ -68,26 +108,22 @@ namespace examples
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
         vi::graphics::initSprite(data.sprites, data.tex[0].index);
-        data.sprites[0].x = -1;
-        data.sprites[0].y = -1;
+        data.sprites[0].s2.pos = { -1,-1 };
         vi::graphics::transform::setUvFromPixels(data.sprites, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites);
 
         vi::graphics::initSprite(data.sprites + 1, data.tex[0].index);
-        data.sprites[1].x = 1;
-        data.sprites[1].y = -1;
+        data.sprites[1].s2.pos = { 1,-1 };
         vi::graphics::transform::setUvFromPixels(data.sprites + 1, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 1);
 
         vi::graphics::initSprite(data.sprites + 2, data.tex[0].index);
-        data.sprites[2].x = -1;
-        data.sprites[2].y = 1;
+        data.sprites[2].s2.pos = { -1,1 };
         vi::graphics::transform::setUvFromPixels(data.sprites + 2, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 2);
 
         vi::graphics::initSprite(data.sprites + 3, data.tex[0].index);
-        data.sprites[3].x = 1;
-        data.sprites[3].y = 1;
+        data.sprites[3].s2.pos = { 1,1 };
         vi::graphics::transform::setUvFromPixels(data.sprites + 3, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f);
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * 10, 13 * 10, data.sprites + 3);
 
@@ -101,8 +137,7 @@ namespace examples
         vi::graphics::destroyGraphics(&data.v.graphics);
         vi::system::destroyWindow(&data.v.window);
     }
-
-    // move camera with WSAD zoom Q/E
+        
     // just to make sure they still work
     void multipleTextures()
     {
@@ -126,14 +161,11 @@ namespace examples
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 3);
 
         vi::graphics::initSprite(data.sprites, data.tex[0].index);
-        data.sprites[0].x = -1;
-        data.sprites[0].y = 1;
+        data.sprites[0].s2.pos = { -1,1 };
         vi::graphics::initSprite(data.sprites + 1, data.tex[1].index);
-        data.sprites[1].x = -1;
-        data.sprites[1].y = -1;
+        data.sprites[1].s2.pos = { -1,-1 };
         vi::graphics::initSprite(data.sprites + 2, data.tex[2].index);
-        data.sprites[2].x = 1;
-        data.sprites[2].y = -1;
+        data.sprites[2].s2.pos = { 1,-1 };
 
         vi::system::loop<gameData*>(loop, &data);
 
@@ -182,7 +214,7 @@ namespace examples
                 }
 
                 elfIsMoving = true;
-                _gameData->sprites[0].x -= frameTime;
+                _gameData->sprites[0].s1.x -= frameTime;
             }
             else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'D'))
             {
@@ -195,29 +227,29 @@ namespace examples
                 }
 
                 elfIsMoving = true;
-                _gameData->sprites[0].x += frameTime;
+                _gameData->sprites[0].s1.x += frameTime;
             }
 
             if (vi::input::isKeyDown(&_gameData->v.keyboard, 'W'))
             {
                 elfIsMoving = true;
-                _gameData->sprites[0].y -= frameTime;
+                _gameData->sprites[0].s1.y -= frameTime;
             }
             else if (vi::input::isKeyDown(&_gameData->v.keyboard, 'S'))
             {
                 elfIsMoving = true;
-                _gameData->sprites[0].y += frameTime;
+                _gameData->sprites[0].s1.y += frameTime;
             }
 
             float distance = vi::graphics::transform::distance2Dsq(
-                _gameData->sprites[0].x, _gameData->sprites[0].y,
-                _gameData->sprites[1].x, _gameData->sprites[1].y);
+                _gameData->sprites[0].s1.x, _gameData->sprites[0].s1.y,
+                _gameData->sprites[1].s1.x, _gameData->sprites[1].s1.y);
 
             // if monster is far enough then start moving towards elf
             if (distance > 0.31f * 0.31f)
             {
-                vi::graphics::transform::moveTo(_gameData->sprites[1].x, _gameData->sprites[1].y,
-                    _gameData->sprites[0].x, _gameData->sprites[0].y, 0.9f, 
+                vi::graphics::transform::moveTo(_gameData->sprites[1].s1.x, _gameData->sprites[1].s1.y,
+                    _gameData->sprites[0].s1.x, _gameData->sprites[0].s1.y, 0.9f,
                     &_gameData->dyn[0].velx, &_gameData->dyn[0].vely);
                 // switch from idle to walk
                 vi::graphics::switchAnimation(_gameData->ani + 3, _gameData->ani + 2, &_gameData->v.timer);
@@ -282,7 +314,7 @@ namespace examples
         vi::graphics::initSprite(data.sprites, data.tex[0].index);
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 4, 28 * 4, data.sprites);
         vi::graphics::initSprite(data.sprites + 1, data.tex[0].index);
-        data.sprites[1].x = 1;
+        data.sprites[1].s1.x = 1;
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 4, 20 * 4, data.sprites + 1);
 
         // init animations
@@ -331,11 +363,11 @@ namespace examples
             vi::graphics::updateDynamicSprite(_gameData->sprites, _gameData->dyn, &_gameData->v.timer);
 
             // manually update some properties scaled by timer
-            _gameData->sprites[1].sx = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) * 10) / 2 + 1;
-            _gameData->sprites[2].sy = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) * 7) / 2 + 5;
-            _gameData->sprites[3].r = sinf(vi::time::getGameTimeSec(&_gameData->v.timer)) / 4 + 0.75f;
-            _gameData->sprites[3].g = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI) / 4 + 0.75f;
-            _gameData->sprites[3].b = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI * 2) / 4 + 0.75f;
+            _gameData->sprites[1].s1.sx = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) * 10) / 2 + 1;
+            _gameData->sprites[2].s1.sy = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) * 7) / 2 + 5;
+            _gameData->sprites[3].s1.r = sinf(vi::time::getGameTimeSec(&_gameData->v.timer)) / 4 + 0.75f;
+            _gameData->sprites[3].s1.g = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI) / 4 + 0.75f;
+            _gameData->sprites[3].s1.b = sinf(vi::time::getGameTimeSec(&_gameData->v.timer) + vi::math::FORTH_PI * 2) / 4 + 0.75f;
 
             // must update animations
             vi::graphics::updateAnimation(&_gameData->v.timer, _gameData->ani);
@@ -356,13 +388,10 @@ namespace examples
 
 #define MAKE_SPRITE(__n,__x,__y,__rot,__sx,__sy,__r,__g,__b) data.sprites[__n] = {}; \
         vi::graphics::transform::setUvFromPixels(data.sprites + __n, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f); \
-        data.sprites[__n].r = __r; \
-        data.sprites[__n].g = __g; \
-        data.sprites[__n].b = __b; \
-        data.sprites[__n].x = __x; \
-        data.sprites[__n].y = __y; \
-        data.sprites[__n].rot = __rot; \
-        data.sprites[__n].textureIndex = data.tex[0].index; \
+        data.sprites[__n].s2.col = {__r,__g,__b}; \
+        data.sprites[__n].s2.pos = {__x,__y}; \
+        data.sprites[__n].s2.rot = __rot; \
+        data.sprites[__n].s2.textureIndex = data.tex[0].index; \
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * __sx, 13 * __sy, data.sprites + __n);
 
         MAKE_SPRITE(0, -14, -0, 0, 10, 10, 1, 1, 1)
@@ -378,8 +407,7 @@ namespace examples
 
         // init sprite for animation
         vi::graphics::initSprite(data.sprites + 4, data.tex[0].index);
-        data.sprites[4].x = 4;
-        data.sprites[4].y = 2;
+        data.sprites[4].s2.pos = { 4,2 };
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 4, 28 * 4, data.sprites + 4);
         // init uv for animation using convenience function
         vi::graphics::uv uvForAni[9];
@@ -426,13 +454,10 @@ namespace examples
 
 #define MAKE_SPRITE(__n,__x,__y,__rot,__sx,__sy,__r,__g,__b) data.sprites[__n] = {}; \
         vi::graphics::transform::setUvFromPixels(data.sprites + __n, 293.f, 18.f, 6.f, 13.f, 512.f, 512.f); \
-        data.sprites[__n].r = __r; \
-        data.sprites[__n].g = __g; \
-        data.sprites[__n].b = __b; \
-        data.sprites[__n].x = __x; \
-        data.sprites[__n].y = __y; \
-        data.sprites[__n].rot = __rot; \
-        data.sprites[__n].textureIndex = data.tex[0].index; \
+        data.sprites[__n].s2.col = {__r,__g,__b}; \
+        data.sprites[__n].s2.pos = {__x,__y}; \
+        data.sprites[__n].s2.rot = __rot; \
+        data.sprites[__n].s2.textureIndex = data.tex[0].index; \
         vi::graphics::transform::setPixelScale(&data.v.graphics, &data.v.camera, 6 * __sx, 13 * __sy, data.sprites + __n);
 
         // different scales
@@ -462,12 +487,12 @@ namespace examples
         // uv swap to flip vertically and horizontally
         MAKE_SPRITE(18, 7, 5, 0, 10, 10, 1, 1, 1)
         MAKE_SPRITE(19, 11, 5, 0, 10, 10, 1, 1, 1)
-        vi::util::swap(data.sprites[19].left, data.sprites[19].right);
+        vi::util::swap(data.sprites[19].s1.left, data.sprites[19].s1.right);
         MAKE_SPRITE(20, 7, 0, 0, 10, 10, 1, 1, 1)
-        vi::util::swap(data.sprites[20].top, data.sprites[20].bottom);
+        vi::util::swap(data.sprites[20].s1.top, data.sprites[20].s1.bottom);
         MAKE_SPRITE(21, 11, 0, 0, 10, 10, 1, 1, 1)
-        vi::util::swap(data.sprites[21].left, data.sprites[21].right);
-        vi::util::swap(data.sprites[21].top, data.sprites[21].bottom);
+        vi::util::swap(data.sprites[21].s1.left, data.sprites[21].s1.right);
+        vi::util::swap(data.sprites[21].s1.top, data.sprites[21].s1.bottom);
 
 #undef MAKE_SPRITE
 
@@ -536,95 +561,18 @@ namespace examples
 
     int main()
     {
-        basicSprite();
-        moreSprites();
-        timerMotionAnimation();
-        keyboardMultipleAnimationsMath();
-        multipleTextures();
-        camera();
+        //basicSprite();
+        //moreSprites();
+        //timerMotionAnimation();
+        //keyboardMultipleAnimationsMath();
+        //multipleTextures();
+        //camera();
+        text();
         return 0;
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////////////
-
-struct gameData
-{
-    vi::graphics::animation a[10];
-    vi::graphics::sprite t[100];
-    vi::viva v;
-};
-
-const char* str = "Jedziemy poziomo\nnikc mobilem\no juz na miejscu bedziemy za chwile";
-
-void loop(gameData* data)
-{
-    vi::graphics::drawScene(&data->v.graphics, data->t, 6, &data->v.camera);
-}
-
-int sandbox()
-{
-    vi::graphics::texture tex[10];
-    gameData data = {};
-    vi::vivaInfo info = {};
-	info.width = 1920;
-	info.height = 1080;
-	info.title = "Viva4!";
-    vi::initViva(&data.v, &info);
-    data.v.camera.scale = 0.1f;
-
-    vi::graphics::createTextureFromFile(&data.v.graphics, "bk.png", tex);
-    vi::graphics::createTextureFromFile(&data.v.graphics, "sm.png", tex + 1);
-    vi::graphics::createTextureFromFile(&data.v.graphics, "elf.png", tex + 2);
-    vi::graphics::createTextureFromFile(&data.v.graphics, "ani.bmp", tex + 3);
-    vi::graphics::createTextureFromFile(&data.v.graphics, "font1.png", tex + 4);
-    vi::graphics::createTextureFromFile(&data.v.graphics, "0x72_DungeonTilesetII_v1.png", tex + 5);
-
-    vi::graphics::pushTextures(&data.v.graphics, tex, 6);
-      
-        
-    data.t[0] = {};
-    data.t[0].sx = 3;
-    data.t[0].sy = 3;
-    data.t[0].textureIndex = 0;
-    data.t[0].left = 0;
-    data.t[0].top = 0;
-    data.t[0].right = 1;
-    data.t[0].bottom = 1;
-    data.t[0].r = 1;
-    data.t[0].g = 1;
-    data.t[0].b = 1;
-
-    for (int i = 1; i < 100; i++)
-    {
-        data.t[i] = {};
-        data.t[i].sx = 3;
-        data.t[i].sy = 3;
-        data.t[i].textureIndex = 0;
-        data.t[i].left = 0;
-        data.t[i].top = 0;
-        data.t[i].right = 1;
-        data.t[i].bottom = 1;
-        data.t[i].r = 1;
-        data.t[i].g = 1;
-        data.t[i].b = 1;
-        data.t[i].x = rand() % 10 - 5;
-    }
-
-    vi::system::loop<gameData*>(loop, &data);
-
-    vi::graphics::destroyTexture(&data.v.graphics, tex);
-    vi::graphics::destroyTexture(&data.v.graphics, tex + 1);
-    vi::graphics::destroyTexture(&data.v.graphics, tex + 2);
-    vi::graphics::destroyTexture(&data.v.graphics, tex + 3);
-    vi::graphics::destroyTexture(&data.v.graphics, tex + 4);
-    vi::graphics::destroyGraphics(&data.v.graphics);
-
-	return 0;
-}
-
 int main()
 {
-    //return sandbox();
     return examples::main();
 }
