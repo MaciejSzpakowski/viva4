@@ -215,6 +215,51 @@ namespace vi::math
     const float THIRD_PI = PI / 3;
     const float FORTH_PI = PI / 4;
     const float DEGREE = PI / 180;
+
+    float mag2D(float x, float y)
+    {
+        return sqrtf(x * x + y * y);
+    }
+
+    float mag2Dsq(float x, float y)
+    {
+        return x * x + y * y;
+    }
+
+    void norm2D(float x, float y, float* dstx, float* dsty)
+    {
+        float mag = mag2D(x, y);
+        *dstx = x / mag;
+        *dsty = y / mag;
+    }
+
+    float distance2D(float x1, float y1, float x2, float y2)
+    {
+        return sqrtf((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    }
+
+    float distance2Dsq(float x1, float y1, float x2, float y2)
+    {
+        return (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
+    }
+
+    // sets velx, vely in such way that object will move from start to dst at speed 'speed'
+    void moveTo(float startx, float starty, float dstx, float dsty, float speed, float* velx, float* vely)
+    {
+        float dx = dstx - startx;
+        float dy = dsty - starty;
+        norm2D(dx, dy, velx, vely);
+        *velx *= speed;
+        *vely *= speed;
+    }
+
+    // calculates the angle when (x,y) points at (targetx,targety)
+    float lookAt(float x, float y, float targetx, float targety, float* rot)
+    {
+        // not implemented
+        assert(false);
+        return 0;
+    }
 }
 
 namespace vi::system
@@ -234,7 +279,10 @@ namespace vi::system
 
         return retval;
     }
-
+    short wheelDelta = 0;
+    int rawMouseDeltax = 0;
+    int rawMouseDeltay = 0;
+    bool quitMessagePosted = false;
     byte* readFile(const char* filename, vi::memory::heap* h, size_t* outSize)
     {
         FILE* file = fopen(filename, "rb");
@@ -280,12 +328,38 @@ namespace vi::system
             {
             }
             else
+            {
                 return DefWindowProc(hwnd, uMsg, wParam, lParam); // this makes ALT+F4 work
+            }
+
             break;
         }
         case WM_CLOSE:
         {
             PostQuitMessage(0);
+            break;
+        }
+        case WM_MOUSEWHEEL:
+        {
+            wheelDelta = GET_WHEEL_DELTA_WPARAM(wParam);
+            break;
+        }
+        case WM_INPUT:
+        {
+            UINT dwSize = 48; // 48 for 64bit build
+            static BYTE lpb[48];
+
+            // this gets relative coords
+            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER));
+
+            RAWINPUT* raw = (RAWINPUT*)lpb;
+
+            if (raw->header.dwType == RIM_TYPEMOUSE)
+            {
+                rawMouseDeltax = raw->data.mouse.lLastX;
+                rawMouseDeltay = raw->data.mouse.lLastY;
+            }
+
             break;
         }
         default:
@@ -306,7 +380,9 @@ namespace vi::system
     {
         HWND handle;
         HINSTANCE hinstance;
+        // client height
         uint height;
+        // client width
         uint width;
     };
 
@@ -340,6 +416,16 @@ namespace vi::system
         }
 #endif
         ShowWindow(w->handle, SW_SHOW);
+
+        USHORT HID_USAGE_PAGE_GENERIC = 1;
+        USHORT HID_USAGE_GENERIC_MOUSE = 2;
+
+        RAWINPUTDEVICE Rid;
+        Rid.usUsagePage = HID_USAGE_PAGE_GENERIC;
+        Rid.usUsage = HID_USAGE_GENERIC_MOUSE;
+        Rid.dwFlags = RIDEV_INPUTSINK;
+        Rid.hwndTarget = w->handle;
+        RegisterRawInputDevices(&Rid, 1, sizeof(RAWINPUTDEVICE));
     }
 
     void destroyWindow(window* w)
@@ -355,8 +441,20 @@ namespace vi::system
 
         while (true)
         {
+            // reset delta
+            wheelDelta = 0;
+            rawMouseDeltax = 0;
+            rawMouseDeltay = 0;
+
+            msg.message = 0;
+
             while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
             {
+                // NEED additional check because WM_QUIT might be immediately followed by something
+                // else in the same while loop so break right away
+                if (msg.message == WM_QUIT)
+                    break;
+
                 TranslateMessage(&msg);
                 DispatchMessage(&msg);
             }
@@ -2209,7 +2307,7 @@ namespace vi::graphics
         }
     }
 
-    void updateTextTransform(text* t)
+    void updateText(text* t)
     {
         if (t->str[0] == 0)
             return;
@@ -2268,20 +2366,19 @@ namespace vi::graphics
         d->velsy += d->accsy * delta;
         s->s1.sy += d->velsy * delta;
     }
-}
 
-namespace vi::graphics::transform
-{
-    void setPixelScale(renderer* g, camera* c, uint width, uint height, sprite* s)
+    // 'pixelWidth' and 'pixelHeight' are dimensions in pixel
+    void setPixelScale(renderer* g, camera* c, uint pixelWidth, uint pixelHeight, float* sx, float* sy)
     {
-        s->s1.sx = 2.0f / g->swapChainExtent.width / c->scale * width * c->aspectRatio;
-        s->s1.sy = 2.0f / g->swapChainExtent.height / c->scale * height;
+        *sx = 2.0f / g->swapChainExtent.width / c->scale * pixelWidth * c->aspectRatio;
+        *sy = 2.0f / g->swapChainExtent.height / c->scale * pixelHeight;
     }
 
-    void setScreenPos(renderer* g, camera* c, uint x, uint y, sprite* s)
+    // 'pixelx' and 'pixely' are window coordinates in pixels (0,0) is in upper left corner
+    void setScreenPos(renderer* g, camera* c, uint pixelx, uint pixely, float* x, float* y)
     {
-        s->s1.x = 2.0f / g->swapChainExtent.width * (x - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
-        s->s1.y = 2.0f / g->swapChainExtent.height * (y - g->swapChainExtent.height / 2.0f) / c->scale;
+        *x = 2.0f / g->swapChainExtent.width * (pixelx - g->swapChainExtent.width / 2.0f) / c->scale * c->aspectRatio;
+        *y = 2.0f / g->swapChainExtent.height * (pixely - g->swapChainExtent.height / 2.0f) / c->scale;
     }
 
     // puts width and height in world coordinates of 1px in f[0] and f[1]
@@ -2291,87 +2388,100 @@ namespace vi::graphics::transform
         f[1] = 2.0f / g->swapChainExtent.height / c->scale;
     }
 
-    void setUvFromPixels(sprite* s, float pixelOffsetX, float pixelOffsetY, float pixelWidth,
-        float pixelHeight, float pixelTextureWidth, float pixelTextureHeight)
+    // utli function that will calc uv coords if you know pixel coords
+    void setUvFromPixels(float pixelOffsetX, float pixelOffsetY, float pixelWidth,
+        float pixelHeight, float pixelTextureWidth, float pixelTextureHeight, uv* uv1)
     {
-        s->s1.left = pixelOffsetX / pixelTextureWidth;
-        s->s1.top = pixelOffsetY / pixelTextureHeight;
-        s->s1.right = s->s1.left + pixelWidth / pixelTextureWidth;
-        s->s1.bottom = s->s1.top + pixelHeight / pixelTextureHeight;
-    }
-
-    float mag2D(float x, float y)
-    {
-        return sqrtf(x * x + y * y);
-    }
-
-    float mag2Dsq(float x, float y)
-    {
-        return x * x + y * y;
-    }
-
-    void norm2D(float x, float y, float* dstx, float* dsty)
-    {
-        float mag = mag2D(x, y);
-        *dstx = x / mag;
-        *dsty = y / mag;
-    }
-
-    float distance2D(float x1, float y1, float x2, float y2)
-    {
-        return sqrtf((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-    }
-
-    float distance2Dsq(float x1, float y1, float x2, float y2)
-    {
-        return (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1);
-    }
-
-    // sets velx, vely in such way that object will move from start to dst at speed 'speed'
-    void moveTo(float startx, float starty, float dstx, float dsty, float speed, float* velx, float* vely)
-    {
-        float dx = dstx - startx;
-        float dy = dsty - starty;
-        norm2D(dx, dy, velx, vely);
-        *velx *= speed;
-        *vely *= speed;
-    }
-
-    // calculates the angle when (x,y) points at (targetx,targety)
-    float lookAt(float x, float y, float targetx, float targety, float* rot)
-    {
-        // not implemented
-        assert(false);
-        return 0;
+        uv1->left = pixelOffsetX / pixelTextureWidth;
+        uv1->top = pixelOffsetY / pixelTextureHeight;
+        uv1->right = uv1->left + pixelWidth / pixelTextureWidth;
+        uv1->bottom = uv1->top + pixelHeight / pixelTextureHeight;
     }
 }
 
 namespace vi::input
 {
-    enum class key : int
+    // for letters and numbers use 'A', '0' etc
+    //// this doesnt have to be enum class because numbers are allowed from outside of this set
+    enum key : int
     {
+        LMOUSE = VK_LBUTTON,
+        RMOUSE = VK_RBUTTON,
+        MMOUSE = VK_MBUTTON,
+
         LEFT = VK_LEFT,
         RIGHT = VK_RIGHT,
         UP = VK_UP,
         DOWN = VK_DOWN,
+
         INSERT = VK_INSERT,
         DEL = VK_DELETE,
         HOME = VK_HOME,
         END = VK_END,
         PAGEUP = VK_PRIOR,
         PAGEDOWN = VK_NEXT,
+        SCROLLLOCK = VK_SCROLL,
+        PRNT_SCRN = VK_SNAPSHOT,
+
         TAB = VK_TAB,
-        SPACE = VK_SPACE,
+        CAPSLOCK = VK_CAPITAL,
+        LSHIFT = VK_LSHIFT,
+        LALT = VK_LMENU,
         LCONTROL = VK_LCONTROL,
-        RCONTROL = VK_RCONTROL,
+        LWIN = VK_LWIN,
+
+        SPACE = VK_SPACE,
+
         BACKSPACE = VK_BACK,
         ENTER = VK_RETURN,
-        ESCAPE = VK_ESCAPE,
-        LSHIFT = VK_LSHIFT,
         RSHIFT = VK_RSHIFT,
-        LALT = VK_LMENU,
+        RCONTROL = VK_RCONTROL,
         RALT = VK_RMENU,
-        CAPSLOCK = VK_CAPITAL
+        RWIN = VK_RWIN,
+        MENU = VK_APPS,
+
+        ESCAPE = VK_ESCAPE,
+        F1 = VK_F1,
+        F2 = VK_F2,
+        F3 = VK_F3,
+        F4 = VK_F4,
+        F5 = VK_F5,
+        F6 = VK_F6,
+        F7 = VK_F7,
+        F8 = VK_F8,
+        F9 = VK_F9,
+        F10 = VK_F10,
+        F11 = VK_F11,
+        F12 = VK_F12,
+
+        NUMLOCK = VK_NUMLOCK,
+        NUM0 = VK_NUMPAD0,
+        NUM1 = VK_NUMPAD1,
+        NUM2 = VK_NUMPAD2,
+        NUM3 = VK_NUMPAD3,
+        NUM4 = VK_NUMPAD4,
+        NUM5 = VK_NUMPAD5,
+        NUM6 = VK_NUMPAD6,
+        NUM7 = VK_NUMPAD7,
+        NUM8 = VK_NUMPAD8,
+        NUM9 = VK_NUMPAD9,
+        NUMDIV = VK_DIVIDE,
+        NUMMUL = VK_MULTIPLY,
+        NUMMINUS = VK_SUBTRACT,
+        MULPLUS = VK_ADD,
+        NUMDEL = VK_DECIMAL,
+
+        MINUS = VK_OEM_MINUS,
+        EQUALS = VK_OEM_PLUS,
+        BRACKETOPEN = VK_OEM_4,
+        BRACKETCLOSE = VK_OEM_6,
+        PIPE = VK_OEM_5,
+        SEMICOLON = VK_OEM_1,
+        QUOTE = VK_OEM_7,
+        COMMA = VK_OEM_COMMA,
+        PERIOD = VK_OEM_PERIOD,
+        SLASH = VK_OEM_2,
+        TILD = VK_OEM_3
     };
 
     struct keyboard
@@ -2382,6 +2492,21 @@ namespace vi::input
         bool* prevState;
     };
 
+    struct mouse
+    {
+        int _cursorScreenx;
+        int _cursorScreeny;
+        int _cursorClientx;
+        int _cursorClienty;
+        float _cursorWorldx;
+        float _cursorWorldy;
+        int _cursorDeltax;
+        int _cursorDeltay;
+        short _wheel;
+        int _rawMouseDeltax;
+        int _rawMouseDeltay;
+    };
+
     void initKeyboard(keyboard* k)
     {
         k->curState = k->buf1;
@@ -2390,7 +2515,7 @@ namespace vi::input
         memset(k->buf2, 0, KEYBOARD_KEY_COUNT);
     }
 
-    void updateKeyboardState(keyboard* k)
+    void updateKeyboard(keyboard* k)
     {
         // swap states
         bool* temp = k->prevState;
@@ -2420,6 +2545,74 @@ namespace vi::input
     {
         return !k->curState[_key] && k->prevState[_key];
     }
+
+    void initMouse(mouse* m)
+    {
+        *m = {};
+    }
+
+    void updateMouse(mouse* m, system::window* w, graphics::camera* c)
+    {
+        POINT p;
+        GetCursorPos(&p);
+        m->_cursorDeltax = p.x - m->_cursorScreenx;
+        m->_cursorDeltay = p.y - m->_cursorScreeny;
+        m->_cursorScreenx = p.x;
+        m->_cursorScreeny = p.y;
+        m->_wheel = system::wheelDelta;
+        m->_rawMouseDeltax = system::rawMouseDeltax;
+        m->_rawMouseDeltay = system::rawMouseDeltay;
+
+        p = { m->_cursorScreenx, m->_cursorScreeny };
+        ScreenToClient(w->handle, &p);
+        m->_cursorClientx = p.x;
+        m->_cursorClienty = p.y;
+
+        m->_cursorWorldx = ((float)m->_cursorClientx - w->width / 2) / w->width / c->scale * c->aspectRatio * 2 + c->x;
+        m->_cursorWorldy = ((float)m->_cursorClienty - w->height / 2) / w->height / c->scale * 2 + c->y;
+    }
+
+    // this is relative to monitor's upper left corner
+    void getCursorScreenPos(mouse* m, int* x, int* y)
+    {
+        *x = m->_cursorScreenx;
+        *y = m->_cursorScreeny;
+    }
+
+    // this is relative to client's upper left corner 
+    void getCursorClientPos(mouse* m, int* x, int* y)
+    {
+        *x = m->_cursorClientx;
+        *y = m->_cursorClienty;
+    }
+
+    void getCursorWorldPos(mouse* m, float* x, float* y)
+    {
+        *x = m->_cursorWorldx;
+        *y = m->_cursorWorldy;
+    }
+
+    void getCursorScreenDelta(mouse* m, int* x, int* y)
+    {
+        *x = m->_cursorDeltax;
+        *y = m->_cursorDeltay;
+    }
+
+    void getCursorDeltaRaw(mouse* m, int* x, int* y)
+    {
+        *x = m->_rawMouseDeltax;
+        *y = m->_rawMouseDeltay;
+    }
+
+    bool mouseMoved(mouse* m)
+    {
+        return (m->_cursorDeltax + m->_cursorDeltay) != 0;
+    }
+
+    short getWheelDelta(mouse* m)
+    {
+        return m->_wheel;
+    }
 }
 
 namespace vi::network
@@ -2439,6 +2632,7 @@ namespace vi
     struct viva
     {
         input::keyboard keyboard;
+        input::mouse mouse;
         system::window window;
         graphics::renderer graphics;
         graphics::camera camera;
@@ -2458,6 +2652,7 @@ namespace vi
 
         system::initWindow(&wInfo, &v->window);
         input::initKeyboard(&v->keyboard);
+        input::initMouse(&v->mouse);
         memory::heapInit(&v->heap);
         graphics::graphicsInit(&rInfo, &v->graphics);
         graphics::initCamera(&v->graphics, &v->camera);
