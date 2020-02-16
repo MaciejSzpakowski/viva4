@@ -205,6 +205,13 @@ namespace vi::util
         a = b;
         b = tmp;
     }
+
+    // zero out memory at dst sizeof(T)
+    template<typename T>
+    void zero(T* dst)
+    {
+        memset(dst, 0, sizeof(T));
+    }
 }
 
 namespace vi::math

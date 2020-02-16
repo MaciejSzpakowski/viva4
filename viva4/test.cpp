@@ -14,9 +14,47 @@ namespace examples
 
     gameData data;
 
+    // layer sprites based on z coordinate
+    // if objects have the same z coord then they layered based
+    // on order in which they are drawn which is not good
+    // if you want to put something at the top
+    // Here, upper sprites should be all above lower sprites
+    // so they are layered independently from order.
     void zindex()
     {
+        auto loop = [](gameData* _gameData)
+        {
+            vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 10, &_gameData->v.camera);
+        };
 
+        vi::util::zero(&data);
+        vi::vivaInfo info = {};
+        info.width = 960;
+        info.height = 540;
+        info.title = "Z Index";
+        vi::initViva(&data.v, &info);
+
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/0x72_DungeonTilesetII_v1.png", data.tex);
+        vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
+
+#define MAKE_SPRITE(n,x,y,z)  vi::graphics::initSprite(data.sprites + n, data.tex[0].index); \
+        vi::graphics::setUvFromPixels(240, 208, 16, 16, 512, 512, &data.sprites[n].s2.uv1); \
+        vi::graphics::setPixelScale(&data.v.graphics, &data.v.camera, 16 * 5, 16 * 5, \
+            &data.sprites[n].s1.sx, &data.sprites[n].s1.sy); \
+        data.sprites[n].s2.pos = {x,y,z};
+
+        for (int i = 0; i < 10; i++)
+        {
+            MAKE_SPRITE(i, -0.8f + i * 0.2f, i % 2 ? 0.2f : 0.1f, i % 2 ? 0.2f : 0.1f)
+        }
+
+#undef MAKE_SPRITE
+
+        vi::system::loop<gameData*>(loop, &data);
+
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex);
+        vi::graphics::destroyGraphics(&data.v.graphics);
+        vi::system::destroyWindow(&data.v.window);
     }
 
     // get some cursor data
@@ -105,7 +143,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, count, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -173,7 +211,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 256, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -210,14 +248,13 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 1000, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
         info.title = "Text";
         vi::initViva(&data.v, &info);
 
-        memset(&data, 0, sizeof(gameData));
         vi::graphics::createTextureFromFile(&data.v.graphics, "textures/font1.png", data.tex);
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
@@ -300,7 +337,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 10, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -354,7 +391,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 3, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -513,7 +550,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 100, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -596,7 +633,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 100, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -663,7 +700,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 100, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         vi::vivaInfo info = {};
         info.width = 960;
         info.height = 540;
@@ -737,7 +774,7 @@ namespace examples
             vi::graphics::drawScene(&_gameData->v.graphics, _gameData->sprites, 1, &_gameData->v.camera);
         };
 
-        memset(&data, 0, sizeof(gameData));
+        vi::util::zero(&data);
         // init viva
         // it's a wrapper function that initializes some viva objects
         vi::vivaInfo info = {};
@@ -786,15 +823,16 @@ namespace examples
 
     int main()
     {
-        //basicSprite();
-        //moreSprites();
-        //timerMotionAnimation();
-        //keyboardMultipleAnimationsMath();
-        //multipleTextures();
-        //camera();
-        //text();
-        //inputState();
+        basicSprite();
+        moreSprites();
+        timerMotionAnimation();
+        keyboardMultipleAnimationsMath();
+        multipleTextures();
+        camera();
+        text();
+        inputState();
         mouseAndFixedSprite();
+        zindex();
         return 0;
     }
 }

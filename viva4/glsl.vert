@@ -62,6 +62,7 @@ void main() {
 		0, 0, 1, 0,
 		1/ubo.cam.aspectRatio * ubo.cam.scale * -ubo.cam.x, ubo.cam.scale * -ubo.cam.y, 0, 1
 	);
+    // fixed means ignore camera except for aspect ratio
     if(t._fixed)
     {
         cam = mat4(
