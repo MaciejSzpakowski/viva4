@@ -138,7 +138,10 @@ namespace examples
 
         // set text color black
         for (uint i = 1; i < 1000; i++)
+        {
             data.sprites[i].s2.col = { 0,0,0 };
+            data.sprites[i].s1.fixed = true;
+        }
 
         vi::system::loop<gameData*>(loop, &data);
 

@@ -585,9 +585,9 @@ namespace vi::graphics
         // 16 byte
 
         // move with camera or fixed to viewport
-        //byte fixed;
+        bool fixed;
         // padding because this truct must be multiple of 16bytes
-        //byte padding[15];
+        byte padding[15];
     };
 
     struct color

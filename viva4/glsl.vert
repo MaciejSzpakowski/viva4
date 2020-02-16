@@ -20,6 +20,7 @@ struct transform
 	float r;
 	float g;
 	float b;
+    bool _fixed;
 };
 
 struct camera
@@ -61,6 +62,15 @@ void main() {
 		0, 0, 1, 0,
 		1/ubo.cam.aspectRatio * ubo.cam.scale * -ubo.cam.x, ubo.cam.scale * -ubo.cam.y, 0, 1
 	);
+    if(t._fixed)
+    {
+        cam = mat4(
+		1/ubo.cam.aspectRatio, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	);
+    }
 	// origin
 	mat4 ori = mat4(
 		1, 0, 0, 0,
