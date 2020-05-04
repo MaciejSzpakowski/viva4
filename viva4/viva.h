@@ -8,27 +8,40 @@
 #include <cmath>
 #include <ctime>
 #include <functional>
+#include <random>
+#include <windows.h>
+
+#ifdef VIVA_IMPL
 
 // image loading library
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 // windows + vulkan
-#include <windows.h>
 #define VK_USE_PLATFORM_WIN32_KHR
 #include "c:/VulkanSDK/1.1.108.0/Include/vulkan/vulkan.h"
 //#pragma comment(linker, "/subsystem:windows")
 #pragma comment(lib, "C:/VulkanSDK/1.1.108.0/Lib/vulkan-1.lib")
 
-#define ENABLE_VALIDATION
+#define VI_VULKAN_VALIDATION
 #define VIDBG
+#define VIDBG2
 
 #define KEYBOARD_KEY_COUNT 256
 #define WND_CLASSNAME "mywindow"
 
+#undef min
+#undef max
+
+#define _max(a,b)            (((a) > (b)) ? (a) : (b))
+
+#define _min(a,b)            (((a) < (b)) ? (a) : (b))
+
 typedef unsigned char byte;
 typedef unsigned int uint;
 
+// if you see a problem with vi::memory
+// it's because you have to enable new namespace syntax (c++latest)
 namespace vi::memory
 {
 	const int MAX_HEAP_BLOCKS_COUNT = 100;
@@ -47,7 +60,7 @@ namespace vi::memory
         uint capacity;
     };
 
-	void heapInit(heap* h)
+	void initHeap(heap* h)
 	{
 		for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
 			h->blocks[i] = nullptr;
@@ -66,7 +79,9 @@ namespace vi::memory
 		return true;
 	}
 
-	void* heapAlloc(heap* h, size_t size)
+    // size is how many elements of T (NOT size in bytes of the chunk to allocate)
+    template<typename T>
+	T* heapAlloc(heap* h, uint size)
 	{
 #ifdef VIDBG
 		if (h->size == MAX_HEAP_BLOCKS_COUNT)
@@ -76,7 +91,7 @@ namespace vi::memory
 		}
 #endif
 
-		void* block = malloc(size);
+		T* block = (T*)malloc(size * sizeof(T));
 		h->blocks[h->size++] = block;
 		return block;
 	}
@@ -212,6 +227,35 @@ namespace vi::util
     {
         memset(dst, 0, sizeof(T));
     }
+
+	struct rng
+	{
+		std::mt19937 mt;
+		uint min;
+		uint max;
+
+		rng():mt(::time(0)),min(mt.min()),max(mt.max())
+		{		
+#ifdef VIDBG2
+			if (this->min != 0)
+			{
+				fprintf(stderr, "rng min is not 0");
+				exit(1);
+			}
+#endif
+		}
+	};
+
+	// returns a random float. range: [0.0, 1.0)
+	float rnd(rng* r)
+	{
+		return (float)r->mt() / (float)r->max;
+	}
+
+	int rndInt(rng* r, int min, int max)
+	{
+		return r->mt() % (max - min) + min;
+	}
 }
 
 namespace vi::math
@@ -303,7 +347,7 @@ namespace vi::system
 #endif
 
         size_t size = getFileSize(file);
-        byte* block = (byte*)vi::memory::heapAlloc(h, size + 1);
+        byte* block = vi::memory::heapAlloc<byte>(h, size + 1);
         size_t it = 0;
 
         while (true)
@@ -594,7 +638,10 @@ namespace vi::graphics
         // move with camera or fixed to viewport
         bool fixed;
         // padding because this truct must be multiple of 16bytes
-        byte padding[15];
+        byte padding[11];
+
+		// index in sprite manager
+		uint index;
     };
 
     struct color
@@ -815,7 +862,7 @@ namespace vi::graphics
         assert(sizeof(graphics::camera) % 16 == 0);
 
 		memory::heap helperHeap;
-		memory::heapInit(&helperHeap);
+		memory::initHeap(&helperHeap);
 
         for (uint i = 0; i < 10; i++)
             g->drawCommands[i] = VK_NULL_HANDLE;
@@ -847,7 +894,7 @@ namespace vi::graphics
 
 		// enable this to see some diagnostic
 		// requires vulkan 1.1.106 or higher, prints to stdout by default
-#ifdef ENABLE_VALIDATION
+#ifdef VI_VULKAN_VALIDATION
 		vkInstanceArgs.enabledLayerCount = 1;
 		vkInstanceArgs.ppEnabledLayerNames = layers;
 #endif
@@ -876,7 +923,7 @@ namespace vi::graphics
 		VkQueueFamilyProperties queueFamilies[10];
 
 		vkEnumeratePhysicalDevices(g->instance, &gpuCount, nullptr);
-		gpuCount = min(10, gpuCount);
+		gpuCount = _min(10, gpuCount);
 		vkEnumeratePhysicalDevices(g->instance, &gpuCount, gpus);
         
 		for (uint32_t i = 0; i < gpuCount; i++)
@@ -884,13 +931,13 @@ namespace vi::graphics
 			vkGetPhysicalDeviceProperties(gpus[i], &gpuProperties);
 			vkGetPhysicalDeviceFeatures(gpus[i], &gpuFeatures);
 			vkGetPhysicalDeviceQueueFamilyProperties(gpus[i], &queueFamilyCount, nullptr);
-			queueFamilyCount = min(10, queueFamilyCount);
+			queueFamilyCount = _min(10, queueFamilyCount);
 			vkGetPhysicalDeviceQueueFamilyProperties(gpus[i], &queueFamilyCount, queueFamilies);
 
 			// check if VK_KHR_SWAPCHAIN_EXTENSION_NAME is supported
 			uint32_t extensionCount;
 			vkEnumerateDeviceExtensionProperties(gpus[i], nullptr, &extensionCount, nullptr);
-			VkExtensionProperties* availableExtensions = (VkExtensionProperties*)memory::heapAlloc(&helperHeap, extensionCount * sizeof(VkExtensionProperties));
+			VkExtensionProperties* availableExtensions = memory::heapAlloc<VkExtensionProperties>(&helperHeap, extensionCount);
 
 			vkEnumerateDeviceExtensionProperties(gpus[i], nullptr, &extensionCount, availableExtensions);
 
@@ -1049,7 +1096,7 @@ namespace vi::graphics
 		uint32_t formatCount;
 		VkSurfaceFormatKHR surfaceFormats[300];
 		vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, g->surface, &formatCount, nullptr);
-		formatCount = min(300, formatCount);
+		formatCount = _min(300, formatCount);
 		vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, g->surface, &formatCount, surfaceFormats);
 
 		// see if format available
@@ -2404,6 +2451,73 @@ namespace vi::graphics
         uv1->right = uv1->left + pixelWidth / pixelTextureWidth;
         uv1->bottom = uv1->top + pixelHeight / pixelTextureHeight;
     }
+
+	struct spriteManager
+	{
+		memory::heap* h;
+		sprite* sprites;
+		uint* indexes;
+		uint* slots;
+		uint capacity;
+		uint size;
+	};
+
+	void initSpriteManager(spriteManager* sm, memory::heap* h, uint capacity)
+	{
+		sm->h = h;
+		sm->sprites = memory::heapAlloc<sprite>(h, capacity);
+		sm->indexes = memory::heapAlloc<uint>(h, capacity);
+		sm->slots = memory::heapAlloc<uint>(h, capacity);
+		sm->capacity = capacity;
+		sm->size = 0;
+
+		for (int i = 0; i < capacity; i++)
+			sm->slots[i] = i;
+	}
+
+	void destroySpriteManager(spriteManager* sm)
+	{
+		memory::heapFree(sm->h, sm->sprites);
+		memory::heapFree(sm->h, sm->indexes);
+		memory::heapFree(sm->h, sm->slots);
+	}
+
+	uint addSprite(spriteManager* sm, uint textureIndex)
+	{
+		if (sm->capacity == sm->size)
+			return -1;
+
+		uint slot = sm->slots[sm->size];
+		sprite* s = sm->sprites + sm->size;
+		s->s1.index = slot;
+		initSprite(s, textureIndex);
+		sm->indexes[slot] = sm->size;
+		sm->size++;
+
+		return slot;
+	}
+
+	sprite* getSprite(spriteManager* sm, uint sprite)
+	{
+		return sm->sprites + sm->indexes[sprite];
+	}
+
+	void removeSprite(spriteManager* sm, uint sprite)
+	{
+		uint index = sm->indexes[sprite];
+		
+		// move last one onto this
+		if (sm->size > 0)
+		{
+			memcpy(sm->sprites + index, sm->sprites + sm->size - 1, sizeof(sprite));
+			uint indexOfLast = sm->sprites[index].s1.index;
+			sm->indexes[indexOfLast] = index;
+		}
+
+		sm->size--;
+		// return free to slot
+		sm->slots[sm->size] = sprite;
+	}
 }
 
 namespace vi::input
@@ -2627,6 +2741,123 @@ namespace vi::network
 
 }
 
+namespace vi::fn
+{
+    struct routine
+    {
+        std::function<int()> fn;
+        float timeout;
+        float interval;
+        float duration;
+        float lastUpdate;
+        float started;
+        uint id;
+        bool destroy;
+    };
+
+    struct queue
+    {
+        memory::heap* h;
+		time::timer* t;
+        routine* routines;
+        uint capacity;
+        uint size;
+        uint idNext;
+    };
+
+    void initQueue(queue* q, memory::heap* h, time::timer* t, uint capacity)
+    {
+        q->h = h;
+		q->t = t;
+        q->routines = memory::heapAlloc<routine>(h, capacity);
+        q->capacity = capacity;
+        q->size = 0;
+        q->idNext = 0;
+    }
+
+    // duration == 0 means run forever
+    uint initRoutine(queue* q, std::function<int()> fn, float timeout, float interval, float duration)
+    {
+        routine* r = q->routines + q->size;
+        q->size++;
+        util::zero<routine>(r);
+        r->duration = duration;
+        r->fn = fn;
+        r->interval = interval;
+        r->started = time::getGameTimeSec(q->t);
+        r->lastUpdate = time::getGameTimeSec(q->t);
+        r->timeout = timeout;
+        r->id = q->idNext;
+        q->idNext++;
+
+        return r->id;
+    }
+
+    void destroyRoutine(queue* q, uint id)
+    {
+        for (uint i = 0; i < q->size; i++)
+        {
+            if (q->routines[i].id == id)
+            {
+                q->routines[i].destroy = true;
+                return;
+            }
+        }
+    }
+
+    uint setTimeout(queue* q, std::function<int()> fn, float timeout)
+    {
+        return initRoutine(q, fn, timeout, 0, 0);
+    }
+
+    uint setInterval(queue* q, std::function<int()> fn, float interval)
+    {
+        return initRoutine(q, fn, 0, interval, 0);
+    }
+
+    // duration == 0 means run forever
+    uint setDuration(queue* q, std::function<int()> fn, float duration)
+    {
+        return initRoutine(q, fn, 0, 0, duration);
+    }
+
+    void destroyQueue(queue* q)
+    {
+        memory::heapFree(q->h, q->routines);
+    }
+
+    void updateQueue(queue* q)
+    {
+        float gameTime = time::getGameTimeSec(q->t);
+
+        for (int i = q->size - 1; i >= 0; i--)
+        {
+            routine* r = q->routines + i;
+
+            // marked for removal or duration expired
+            if (r->destroy || r->duration != 0 && gameTime - r->started > r->duration)
+            {
+                // swap with the last one (which is still active) unless this is the last one
+                if (i < q->size - 1)
+                    util::swap(*r, q->routines[q->size - 1]);
+
+                q->size--;
+                continue;
+            }
+
+            // check if timeout and interval elapsed
+            if (gameTime - r->started > r->timeout && gameTime - r->lastUpdate > r->interval)
+            {
+                int val = r->fn();
+                r->lastUpdate = gameTime;
+
+                if (val == 0)
+                    r->destroy = true;
+            }
+        }
+    }
+}
+
 namespace vi
 {
     struct vivaInfo
@@ -2634,6 +2865,8 @@ namespace vi
         uint width;
         uint height;
         const char* title;
+        uint queueCapacity;
+		uint spriteManagerCapacity;
     };
 
     struct viva
@@ -2645,6 +2878,8 @@ namespace vi
         graphics::camera camera;
         memory::heap heap;
         time::timer timer;
+        fn::queue queue;
+		graphics::spriteManager spriteManager;
     };
 
     void initViva(viva* v, vivaInfo* info)
@@ -2660,9 +2895,25 @@ namespace vi
         system::initWindow(&wInfo, &v->window);
         input::initKeyboard(&v->keyboard);
         input::initMouse(&v->mouse);
-        memory::heapInit(&v->heap);
+        memory::initHeap(&v->heap);
         graphics::graphicsInit(&rInfo, &v->graphics);
         graphics::initCamera(&v->graphics, &v->camera);
         time::initTimer(&v->timer);
+        fn::initQueue(&v->queue, &v->heap, &v->timer, info->queueCapacity);
+
+		if (info->spriteManagerCapacity > 0)
+		{
+			graphics::initSpriteManager(&v->spriteManager, &v->heap,
+				info->spriteManagerCapacity);
+		}
     }
 }
+
+#endif
+
+#ifndef VIVA_IMPL
+namespace vi::memory
+{
+
+}
+#endif
