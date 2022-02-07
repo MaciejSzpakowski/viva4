@@ -1,6 +1,26 @@
 #pragma once
 
 // Viva engine by Maciej Szpakowski
+// IMPORTANT, can compile only in x64
+//#define VIVA_IMPL to use the code, otherwise only prototypes and declarations will be used
+
+// #define VI_VULKAN_H for where vulkan.h file is
+// #define VI_VULKAN_LIB for where vulkan.lib is
+#ifndef VI_VULKAN_H
+#define VI_VULKAN_H <vulkan.h>
+#endif
+
+#ifndef VI_VULKAN_LIB
+#define VI_VULKAN_LIB "vulkan.lib"
+#endif
+
+// uses '#pragma comment(lib' to use vulkan.lib for linking
+
+// error checking
+// #define VI_VULKAN_VALIDATION enables vulkan validation and nothing else, use VIDBG for error checking
+// #define VIDBG enable error checking, use VI_VULKAN_VALIDATION to enable vulkan error checking
+// #define VIDBG2 enable other error checking (i dont know why there are 2 categories)
+// #define VI_VALIDATE yet another error checking category
 
 #include <cstdlib>
 #include <cstring>
@@ -9,7 +29,11 @@
 #include <ctime>
 #include <functional>
 #include <random>
-#include <windows.h>
+
+#define WIN32_LEAN_AND_MEAN
+#include <Ws2tcpip.h> // winsock
+#include <WinSock2.h> // winsock
+#include <Windows.h> // winapi
 
 #ifdef VIVA_IMPL
 
@@ -19,13 +43,10 @@
 
 // windows + vulkan
 #define VK_USE_PLATFORM_WIN32_KHR
-#include "c:/VulkanSDK/1.1.108.0/Include/vulkan/vulkan.h"
+#include VI_VULKAN_H
 //#pragma comment(linker, "/subsystem:windows")
-#pragma comment(lib, "C:/VulkanSDK/1.1.108.0/Lib/vulkan-1.lib")
-
-#define VI_VULKAN_VALIDATION
-#define VIDBG
-#define VIDBG2
+#pragma comment(lib, VI_VULKAN_LIB)
+#pragma comment(lib, "ws2_32.lib")
 
 #define KEYBOARD_KEY_COUNT 256
 #define WND_CLASSNAME "mywindow"
@@ -39,6 +60,7 @@
 
 typedef unsigned char byte;
 typedef unsigned int uint;
+typedef unsigned short ushort;
 
 // if you see a problem with vi::memory
 // it's because you have to enable new namespace syntax (c++latest)
@@ -50,105 +72,78 @@ namespace vi::memory
 	{
 		uint size;
 		void* blocks[MAX_HEAP_BLOCKS_COUNT];
-	};
 
-    template <typename T>
-    struct pool
-    {
-        T* data;
-        uint size;
-        uint capacity;
-    };
+        void init()
+        {
+            for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++) this->blocks[i] = nullptr;
+            this->size = 0;
+        }
 
-	void initHeap(heap* h)
-	{
-		for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
-			h->blocks[i] = nullptr;
+        // size is how many elements of T (NOT size in bytes of the chunk to allocate)
+        template<typename T>
+        T* alloc(uint size)
+        {
+#ifdef VI_VALIDATE
+            if (this->size == MAX_HEAP_BLOCKS_COUNT)
+            {
+                fprintf(stderr, "Heap is full\n");
+                return nullptr;
+            }
 
-		h->size = 0;
-	}
-
-	bool heapIsEmpty(heap* h)
-	{
-		for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
-		{
-			if (h->blocks[i] != nullptr)
-				return false;
-		}
-
-		return true;
-	}
-
-    // size is how many elements of T (NOT size in bytes of the chunk to allocate)
-    template<typename T>
-	T* heapAlloc(heap* h, uint size)
-	{
-#ifdef VIDBG
-		if (h->size == MAX_HEAP_BLOCKS_COUNT)
-		{
-			fprintf(stderr, "Heap is full\n");
-			exit(1);
-		}
+            if (size == 0)
+            {
+                fprintf(stderr, "size is 0\n");
+                return nullptr;
+            }
 #endif
 
-		T* block = (T*)malloc(size * sizeof(T));
-		h->blocks[h->size++] = block;
-		return block;
-	}
+            T* block = (T*)malloc(size * sizeof(T));
+            for (uint i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
+            {
+                if (this->blocks[i] == nullptr)
+                {
+                    this->blocks[i] = block;
+                    this->size++;
+                    break;
+                }
+            }
 
-	void heapFree(heap* h, void* block)
-	{
-		for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
-		{
-			if (h->blocks[i] == block)
-			{
-				free(h->blocks[i]);
-				h->blocks[i] = h->blocks[i];
-				h->blocks[i] = h->blocks[--h->size];
-				return;
-			}
-		}
+            return block;
+        }
 
-#ifdef VIDBG
-		fprintf(stderr, "Heap does not contain that block\n");
-		exit(1);
+        void free(void* block)
+        {
+            for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
+            {
+                if (this->blocks[i] == block)
+                {
+                    ::free(this->blocks[i]);
+                    this->blocks[i] = nullptr;
+                    this->size--;
+                    return;
+                }
+            }
+
+#ifdef VI_VALIDATE
+            fprintf(stderr, "Heap does not contain that block\n");
 #endif
-	}
+        }
 
-	// free all blocks
-	void heapClear(heap* h)
-	{
-		for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
-		{
-			if (h->blocks[i] != nullptr)
-			{
-				free(h->blocks[i]);
-				h->blocks[i] = nullptr;
-			}
-		}
+        // free all blocks
+        void clear()
+        {
+            for (int i = 0; i < MAX_HEAP_BLOCKS_COUNT; i++)
+            {
+                if (this->blocks[i] != nullptr)
+                {
+                    ::free(this->blocks[i]);
+                    this->blocks[i] = nullptr;
+                }
+            }
 
-		h->size = 0;
-	}
-
-    template <typename T>
-    void initPool(heap* h, uint capacity, pool<T>* p)
-    {
-        p->capacity = capacity;
-        p->data = heapAlloc(h, sizeof(T) * capacity);
-        p->size = 0;
-    }
-
-    // TODO can only reserve the front
-    template <typename T>
-    T* reservePool(pool<T>* p, uint size)
-    {
-    }
-
-    template <typename T>
-    T* allocPool(pool<T>* p)
-    {
-
-    }
+            this->size = 0;
+        }
+	};	
 }
 
 namespace vi::time
@@ -160,55 +155,54 @@ namespace vi::time
         long long ticksPerSecond;
         long long startTime;
         long long prevTick;
-    };
 
-    void initTimer(timer* t)
-    {
-        t->gameTime = 0;
-        t->tickTime = 0;
-        LARGE_INTEGER li;
-        BOOL result = ::QueryPerformanceFrequency(&li);
+        void init()
+        {            
+            LARGE_INTEGER li;
+            BOOL result = ::QueryPerformanceFrequency(&li);
 
-#ifdef VIDBG
-        if (!result)
-        {
-            fprintf(stderr, "QueryPerformanceFrequency failed");
-            exit(1);
-        }
+#ifdef VI_VALIDATE
+            if (!result)
+            {
+                fprintf(stderr, "QueryPerformanceFrequency failed");
+                return;
+            }
 #endif
+            this->gameTime = 0;
+            this->tickTime = 0;
+            this->ticksPerSecond = li.QuadPart;
+            ::QueryPerformanceCounter(&li);
+            this->startTime = li.QuadPart;
+            this->prevTick = li.QuadPart;
+        }
 
-        t->ticksPerSecond = li.QuadPart;
-        ::QueryPerformanceCounter(&li);
-        t->startTime = li.QuadPart;
-        t->prevTick = li.QuadPart;
-    }
+        // this updates the timer so it must be called once per frame
+        void update()
+        {
+            LARGE_INTEGER currentTime;
+            ::QueryPerformanceCounter(&currentTime);
 
-    // this updates the timer so it must be called once per frame
-    void updateTimer(timer* t)
-    {
-        LARGE_INTEGER currentTime;
-        ::QueryPerformanceCounter(&currentTime);
+            long long frameDelta = currentTime.QuadPart - this->prevTick;
+            long long gameDelta = currentTime.QuadPart - this->startTime;
+            this->prevTick = currentTime.QuadPart;
+            this->tickTime = (float)((double)frameDelta / (double)this->ticksPerSecond);
+            this->gameTime = (float)((double)gameDelta / (double)this->ticksPerSecond);
+        }
 
-        long long frameDelta = currentTime.QuadPart - t->prevTick;
-        long long gameDelta = currentTime.QuadPart - t->startTime;
-        t->prevTick = currentTime.QuadPart;
-        t->tickTime = (float)((double)frameDelta / (double)t->ticksPerSecond);
-        t->gameTime = (float)((double)gameDelta / (double)t->ticksPerSecond);
-    }
+        // get tick time
+        // tick time is the time between two calls to 'updateTimer'
+        // can be used as frame time if updateTimer is called once per frame
+        float getTickTimeSec()
+        {
+            return this->tickTime;
+        }
 
-    // get tick time
-    // tick time is the time between two calls to 'updateTimer'
-    // can be used as frame time if updateTimer is called once per frame
-    float getTickTimeSec(timer* t)
-    {
-        return t->tickTime;
-    }
-
-    // get time since game started in seconds
-    float getGameTimeSec(timer* t)
-    {
-        return t->gameTime;
-    }
+        // get time since game started in seconds
+        float getGameTimeSec()
+        {
+            return this->gameTime;
+        }
+    };
 }
 
 namespace vi::util
@@ -256,6 +250,75 @@ namespace vi::util
 	{
 		return r->mt() % (max - min) + min;
 	}
+
+    template<typename T>
+    T* find(T* arr, uint len, std::function<bool(T*)> pred)
+    {
+        for (uint i = 0; i < len; i++)
+        {
+            if (pred(arr + i)) return arr + i;
+        }
+
+        return nullptr;
+    }
+
+    template<uint sz>
+    struct stream
+    {
+        byte data[sz];
+        uint capacity;
+        uint len;
+
+        stream()
+        {
+            this->capacity = sz;
+            this->len = 0;
+        }
+
+        void push(const byte* data, uint len)
+        {
+#ifdef VI_VALIDATE
+            if (this->len + len > this->capacity)
+            {
+                fprintf(stderr, "stream overflow");
+                return;
+            }
+#endif
+            memcpy(this->data + this->len, data, len);
+            this->len += len;
+        }
+
+        void push(const char* data, uint len)
+        {
+#ifdef VI_VALIDATE
+            if (this->len + len > this->capacity)
+            {
+                fprintf(stderr, "stream overflow");
+                return;
+            }
+#endif
+            memcpy(this->data + this->len, data, len);
+            this->len += len;
+        }
+
+        void push(uint data)
+        {
+#ifdef VI_VALIDATE
+            if (this->len + 4 > this->capacity)
+            {
+                fprintf(stderr, "stream overflow");
+                return;
+            }
+#endif
+            memcpy(this->data + len, &data, 4);
+            this->len += 4;
+        }
+
+        void clear()
+        {
+            this->len = 0;
+        }
+    };
 }
 
 namespace vi::math
@@ -267,16 +330,19 @@ namespace vi::math
     const float FORTH_PI = PI / 4;
     const float DEGREE = PI / 180;
 
+    // magnitude of a vector
     float mag2D(float x, float y)
     {
         return sqrtf(x * x + y * y);
     }
 
+    // magnitude squared of a vector
     float mag2Dsq(float x, float y)
     {
         return x * x + y * y;
     }
 
+    // normalize src vector (x,y), result is dst vector (dstx, dsty)
     void norm2D(float x, float y, float* dstx, float* dsty)
     {
         float mag = mag2D(x, y);
@@ -347,7 +413,7 @@ namespace vi::system
 #endif
 
         size_t size = getFileSize(file);
-        byte* block = vi::memory::heapAlloc<byte>(h, size + 1);
+        byte* block = h->alloc<byte>(size + 1);
         size_t it = 0;
 
         while (true)
@@ -539,6 +605,7 @@ namespace vi::graphics
     struct rendererInfo
     {
         system::window* wnd;
+        float clearColor[4];
     };
 
 	struct renderer
@@ -574,6 +641,7 @@ namespace vi::graphics
         VkDescriptorSetLayout descriptorSetLayout;
         VkSampler textureSampler;
         VkDescriptorPool descriptorPool;
+        float clearColor[4];
 	};
 
     struct vector3
@@ -638,10 +706,7 @@ namespace vi::graphics
         // move with camera or fixed to viewport
         bool fixed;
         // padding because this truct must be multiple of 16bytes
-        byte padding[11];
-
-		// index in sprite manager
-		uint index;
+        byte padding[15];
     };
 
     struct color
@@ -718,15 +783,67 @@ namespace vi::graphics
     {
         texture* tex;
         uv uv[256];
+
+        font() {}
+        font(texture* t)
+        {
+            this->tex = t;
+        }
     };
 
     struct text
     {
-        font* font;
+        font* f;
         sprite* s;
         const char* str;
         float horizontalSpace;
         float verticalSpace;
+        sprite* last;
+
+        void update()
+        {
+            const char* it = this->str;
+            sprite* s = this->s;
+            uv* uv1 = this->f->uv;
+            float x = s->s1.x;
+            float y = s->s1.y;
+            uint textureIndex = this->f->tex->index;
+
+            while (true)
+            {
+                // iterate untill null terminating character
+                if (*it == 0)
+                    break;
+
+                if (*it == '\n')
+                {
+                    x = this->s->s1.x;
+                    y += this->s->s1.sy + this->verticalSpace;
+                    it++;
+                    continue;
+                }
+
+                s->s2.uv1 = uv1[*it - ' '];
+                s->s1.x = x;
+                s->s1.y = y;
+                s->s1.textureIndex = textureIndex;
+                // set scale and origin equal to the first sprite in the set
+                s->s2.scale = this->s->s2.scale;
+                s->s2.origin = this->s->s2.origin;
+
+                it++;
+                s++;
+                x += this->s->s1.sx + this->horizontalSpace;
+            }
+
+            // if old text was longer then there will be sprites still drawn after the new text
+            // zero them out
+            if (this->last != nullptr)
+            {
+                for (; s < this->last; s++) s->s1.textureIndex = 0;
+            }
+            this->last = s;
+        }
     };
 
 	void _vkCreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkDevice device, VkBuffer* buffer,
@@ -862,7 +979,7 @@ namespace vi::graphics
         assert(sizeof(graphics::camera) % 16 == 0);
 
 		memory::heap helperHeap;
-		memory::initHeap(&helperHeap);
+        helperHeap.init();
 
         for (uint i = 0; i < 10; i++)
             g->drawCommands[i] = VK_NULL_HANDLE;
@@ -937,7 +1054,7 @@ namespace vi::graphics
 			// check if VK_KHR_SWAPCHAIN_EXTENSION_NAME is supported
 			uint32_t extensionCount;
 			vkEnumerateDeviceExtensionProperties(gpus[i], nullptr, &extensionCount, nullptr);
-			VkExtensionProperties* availableExtensions = memory::heapAlloc<VkExtensionProperties>(&helperHeap, extensionCount);
+			VkExtensionProperties* availableExtensions = helperHeap.alloc<VkExtensionProperties>(extensionCount);
 
 			vkEnumerateDeviceExtensionProperties(gpus[i], nullptr, &extensionCount, availableExtensions);
 
@@ -1739,12 +1856,15 @@ namespace vi::graphics
             exit(1);
         }
 #endif
-
-		memory::heapClear(&helperHeap);
+        helperHeap.clear();
 	}
 
 	void graphicsInit(rendererInfo* info, renderer* g)
 	{
+        g->clearColor[0] = info->clearColor[0];
+        g->clearColor[1] = info->clearColor[1];
+        g->clearColor[2] = info->clearColor[2];
+        g->clearColor[3] = info->clearColor[3];
 		_vkInitStep1(info, g);
 	}
 
@@ -2126,7 +2246,7 @@ namespace vi::graphics
             renderPassBeginInfo.renderArea.extent = g->swapChainExtent;
 
             // one is to clear color data and other is to clear depth buffer
-            VkClearValue clearColor[] = { { 1.0f, 1.0f, 1.0f, 1.0f }, {1.0f, 0} };
+            VkClearValue clearColor[] = { { g->clearColor[0], g->clearColor[1], g->clearColor[2], g->clearColor[3] }, {1.0f, 0} };
             renderPassBeginInfo.clearValueCount = 2;
             renderPassBeginInfo.pClearValues = clearColor;
 
@@ -2220,6 +2340,12 @@ namespace vi::graphics
         a->s->s2.uv1 = a->uv[a->currentFrame];
     }
 
+	void initDynamic(dynamic* d, time::timer* t)
+	{
+		util::zero<dynamic>(d);
+        t->getGameTimeSec();
+	}
+
     // make 'updateAnimation' animate frames
     void playAnimation(animation* a, time::timer* t)
     {
@@ -2227,7 +2353,7 @@ namespace vi::graphics
             return;
 
         a->_playing = true;
-        a->_lastUpdate = time::getGameTimeSec(t);
+        a->_lastUpdate = t->getGameTimeSec();
         // update uv to the current frame
         a->s->s2.uv1 = { a->uv[a->currentFrame] };
     }
@@ -2290,7 +2416,7 @@ namespace vi::graphics
 
         // set frame changed to false to invalidate previous true
         a->frameChanged = false;
-        float gameTime = time::getGameTimeSec(t);
+        float gameTime = t->getGameTimeSec();
         // elpased since last update
         float elapsed = gameTime - a->_lastUpdate;
         // update last update
@@ -2359,51 +2485,11 @@ namespace vi::graphics
                 y += height;
             }
         }
-    }
-
-    void updateText(text* t)
-    {
-        if (t->str[0] == 0)
-            return;
-
-        const char* it = t->str;
-        sprite* s = t->s;
-        uv* uv1 = t->font->uv;
-        float x = s->s1.x;
-        float y = s->s1.y;
-        uint textureIndex = t->font->tex->index;
-
-        while (true)
-        {
-            // iterate untill null terminating character
-            if (*it == 0)
-                break;
-
-            if (*it == '\n')
-            {
-                x = t->s->s1.x;
-                y += t->s->s1.sy + t->verticalSpace;
-                it++;
-                continue;
-            }
-
-            s->s2.uv1 = uv1[*it - ' '];
-            s->s1.x = x;
-            s->s1.y = y;
-            s->s1.textureIndex = textureIndex;
-            // set scale and origin equal to the first sprite in the set
-            s->s2.scale = t->s->s2.scale;
-            s->s2.origin = t->s->s2.origin;
-
-            it++;
-            s++;
-            x += t->s->s1.sx + t->horizontalSpace;
-        }
-    }
+    }    
 
     void updateDynamicSprite(sprite* s, dynamic* d, time::timer* t)
     {
-        float currentTime = time::getGameTimeSec(t);
+        float currentTime = t->getGameTimeSec();
         float delta = currentTime - d->_lastUpdate;
         d->_lastUpdate = currentTime;
 
@@ -2451,78 +2537,11 @@ namespace vi::graphics
         uv1->right = uv1->left + pixelWidth / pixelTextureWidth;
         uv1->bottom = uv1->top + pixelHeight / pixelTextureHeight;
     }
-
-	struct spriteManager
-	{
-		memory::heap* h;
-		sprite* sprites;
-		uint* indexes;
-		uint* slots;
-		uint capacity;
-		uint size;
-	};
-
-	void initSpriteManager(spriteManager* sm, memory::heap* h, uint capacity)
-	{
-		sm->h = h;
-		sm->sprites = memory::heapAlloc<sprite>(h, capacity);
-		sm->indexes = memory::heapAlloc<uint>(h, capacity);
-		sm->slots = memory::heapAlloc<uint>(h, capacity);
-		sm->capacity = capacity;
-		sm->size = 0;
-
-		for (int i = 0; i < capacity; i++)
-			sm->slots[i] = i;
-	}
-
-	void destroySpriteManager(spriteManager* sm)
-	{
-		memory::heapFree(sm->h, sm->sprites);
-		memory::heapFree(sm->h, sm->indexes);
-		memory::heapFree(sm->h, sm->slots);
-	}
-
-	uint addSprite(spriteManager* sm, uint textureIndex)
-	{
-		if (sm->capacity == sm->size)
-			return -1;
-
-		uint slot = sm->slots[sm->size];
-		sprite* s = sm->sprites + sm->size;
-		s->s1.index = slot;
-		initSprite(s, textureIndex);
-		sm->indexes[slot] = sm->size;
-		sm->size++;
-
-		return slot;
-	}
-
-	sprite* getSprite(spriteManager* sm, uint sprite)
-	{
-		return sm->sprites + sm->indexes[sprite];
-	}
-
-	void removeSprite(spriteManager* sm, uint sprite)
-	{
-		uint index = sm->indexes[sprite];
-		
-		// move last one onto this
-		if (sm->size > 0)
-		{
-			memcpy(sm->sprites + index, sm->sprites + sm->size - 1, sizeof(sprite));
-			uint indexOfLast = sm->sprites[index].s1.index;
-			sm->indexes[indexOfLast] = index;
-		}
-
-		sm->size--;
-		// return free to slot
-		sm->slots[sm->size] = sprite;
-	}
 }
 
 namespace vi::input
 {
-    // for letters and numbers use 'A', '0' etc
+    // for letters and numbers use 'A' - 'Z', '0' - '9' etc
     //// this doesnt have to be enum class because numbers are allowed from outside of this set
     enum key : int
     {
@@ -2611,6 +2630,43 @@ namespace vi::input
         bool buf2[KEYBOARD_KEY_COUNT];
         bool* curState;
         bool* prevState;
+
+        void init()
+        {
+            this->curState = this->buf1;
+            this->prevState = this->buf2;
+            memset(this->buf1, 0, KEYBOARD_KEY_COUNT);
+            memset(this->buf2, 0, KEYBOARD_KEY_COUNT);
+        }
+
+        void update()
+        {
+            // swap states
+            vi::util::swap(this->curState, this->prevState);
+
+            // get button states
+            for (int i = 0; i < KEYBOARD_KEY_COUNT; i++)
+            {
+                this->curState[i] = (::GetAsyncKeyState(i) & 0x8000) && true;
+            }
+        }
+
+        bool isKeyDown(int _key)
+        {
+            return this->curState[_key];
+        }
+
+        bool isKeyPressed(int _key)
+        {
+            // TODO, return false if this is the first frame
+            //return k->curState[(int)_key] && !k->prevState[(int)_key] && engine->GetFrame() != 0;
+            return this->curState[_key] && !this->prevState[_key];
+        }
+
+        bool isKeyReleased(int _key)
+        {
+            return !this->curState[_key] && this->prevState[_key];
+        }
     };
 
     struct mouse
@@ -2626,119 +2682,311 @@ namespace vi::input
         short _wheel;
         int _rawMouseDeltax;
         int _rawMouseDeltay;
-    };
 
-    void initKeyboard(keyboard* k)
-    {
-        k->curState = k->buf1;
-        k->prevState = k->buf2;
-        memset(k->buf1, 0, KEYBOARD_KEY_COUNT);
-        memset(k->buf2, 0, KEYBOARD_KEY_COUNT);
-    }
-
-    void updateKeyboard(keyboard* k)
-    {
-        // swap states
-        bool* temp = k->prevState;
-        k->prevState = k->curState;
-        k->curState = temp;
-
-        // get button states
-        for (int i = 0; i < KEYBOARD_KEY_COUNT; i++)
+        void init()
         {
-            k->curState[i] = (::GetAsyncKeyState(i) & 0x8000) && true;
+            util::zero(this);
         }
-    }
 
-    bool isKeyDown(keyboard* k, int _key)
-    {
-        return k->curState[_key];
-    }
+        void update(system::window* w, graphics::camera* c)
+        {
+            POINT p;
+            GetCursorPos(&p);
+            this->_cursorDeltax = p.x - this->_cursorScreenx;
+            this->_cursorDeltay = p.y - this->_cursorScreeny;
+            this->_cursorScreenx = p.x;
+            this->_cursorScreeny = p.y;
+            this->_wheel = system::wheelDelta;
+            this->_rawMouseDeltax = system::rawMouseDeltax;
+            this->_rawMouseDeltay = system::rawMouseDeltay;
 
-    bool isKeyPressed(keyboard* k, int _key)
-    {
-        // TODO, return false if this is the first frame
-        //return k->curState[(int)_key] && !k->prevState[(int)_key] && engine->GetFrame() != 0;
-        return k->curState[_key] && !k->prevState[_key];
-    }
+            p = { this->_cursorScreenx, this->_cursorScreeny };
+            ScreenToClient(w->handle, &p);
+            this->_cursorClientx = p.x;
+            this->_cursorClienty = p.y;
 
-    bool isKeyReleased(keyboard* k, int _key)
-    {
-        return !k->curState[_key] && k->prevState[_key];
-    }
+            this->_cursorWorldx = ((float)this->_cursorClientx - w->width / 2) / w->width / c->scale * c->aspectRatio * 2 + c->x;
+            this->_cursorWorldy = ((float)this->_cursorClienty - w->height / 2) / w->height / c->scale * 2 + c->y;
+        }
 
-    void initMouse(mouse* m)
-    {
-        *m = {};
-    }
+        // this is relative to monitor's upper left corner
+        void getCursorScreenPos(int* x, int* y)
+        {
+            *x = this->_cursorScreenx;
+            *y = this->_cursorScreeny;
+        }
 
-    void updateMouse(mouse* m, system::window* w, graphics::camera* c)
-    {
-        POINT p;
-        GetCursorPos(&p);
-        m->_cursorDeltax = p.x - m->_cursorScreenx;
-        m->_cursorDeltay = p.y - m->_cursorScreeny;
-        m->_cursorScreenx = p.x;
-        m->_cursorScreeny = p.y;
-        m->_wheel = system::wheelDelta;
-        m->_rawMouseDeltax = system::rawMouseDeltax;
-        m->_rawMouseDeltay = system::rawMouseDeltay;
+        // this is relative to client's upper left corner 
+        void getCursorClientPos(int* x, int* y)
+        {
+            *x = this->_cursorClientx;
+            *y = this->_cursorClienty;
+        }
 
-        p = { m->_cursorScreenx, m->_cursorScreeny };
-        ScreenToClient(w->handle, &p);
-        m->_cursorClientx = p.x;
-        m->_cursorClienty = p.y;
+        void getCursorWorldPos(float* x, float* y)
+        {
+            *x = this->_cursorWorldx;
+            *y = this->_cursorWorldy;
+        }
 
-        m->_cursorWorldx = ((float)m->_cursorClientx - w->width / 2) / w->width / c->scale * c->aspectRatio * 2 + c->x;
-        m->_cursorWorldy = ((float)m->_cursorClienty - w->height / 2) / w->height / c->scale * 2 + c->y;
-    }
+        void getCursorScreenDelta(int* x, int* y)
+        {
+            *x = this->_cursorDeltax;
+            *y = this->_cursorDeltay;
+        }
 
-    // this is relative to monitor's upper left corner
-    void getCursorScreenPos(mouse* m, int* x, int* y)
-    {
-        *x = m->_cursorScreenx;
-        *y = m->_cursorScreeny;
-    }
+        void getCursorDeltaRaw(int* x, int* y)
+        {
+            *x = this->_rawMouseDeltax;
+            *y = this->_rawMouseDeltay;
+        }
 
-    // this is relative to client's upper left corner 
-    void getCursorClientPos(mouse* m, int* x, int* y)
-    {
-        *x = m->_cursorClientx;
-        *y = m->_cursorClienty;
-    }
+        /// <summary>
+        /// Is cursor position different that last update
+        /// </summary>
+        bool moved()
+        {
+            return (this->_cursorDeltax + this->_cursorDeltay) != 0;
+        }
 
-    void getCursorWorldPos(mouse* m, float* x, float* y)
-    {
-        *x = m->_cursorWorldx;
-        *y = m->_cursorWorldy;
-    }
-
-    void getCursorScreenDelta(mouse* m, int* x, int* y)
-    {
-        *x = m->_cursorDeltax;
-        *y = m->_cursorDeltay;
-    }
-
-    void getCursorDeltaRaw(mouse* m, int* x, int* y)
-    {
-        *x = m->_rawMouseDeltax;
-        *y = m->_rawMouseDeltay;
-    }
-
-    bool mouseMoved(mouse* m)
-    {
-        return (m->_cursorDeltax + m->_cursorDeltay) != 0;
-    }
-
-    short getWheelDelta(mouse* m)
-    {
-        return m->_wheel;
-    }
+        short getWheelDelta()
+        {
+            return this->_wheel;
+        }
+    };    
 }
 
-namespace vi::network
+namespace vi::net
 {
+	uint uid = 1;
+	WSAData wsadata;
+	char lastWinsockError[300];
 
+	void _getLastWinsockErrorMessage(DWORD errorCode)
+	{
+		ZeroMemory(lastWinsockError, 300);
+		FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, 0, errorCode,
+			MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), lastWinsockError, 300, 0);
+	}
+
+	void initNetwork()
+	{
+		int res = WSAStartup(MAKEWORD(2, 2), &wsadata);
+
+#ifdef VI_VALIDATE
+		if (res != 0)
+		{
+			_getLastWinsockErrorMessage(res);
+			fprintf(stderr, lastWinsockError);
+		}
+#endif
+	}
+
+    void uninitNetwork()
+    {
+        int res = WSACleanup();
+#ifdef VI_VALIDATE
+        if (res == SOCKET_ERROR)
+        {
+            _getLastWinsockErrorMessage(WSAGetLastError());
+            fprintf(stderr, lastWinsockError);
+        }
+#endif
+    }    
+
+    struct endpoint
+    {
+        sockaddr_in address;
+        float lastMessage;
+        bool isConnected;
+    };
+
+    struct serverMsg
+    {
+        endpoint* ep;
+
+    };
+
+	struct server
+	{
+		SOCKET s;
+		sockaddr_in address;
+		unsigned short port;
+		uint id;
+
+        server(ushort port)
+        {
+            int result = 0;
+
+            this->port = port;
+            this->id = uid++;
+            this->s = ::socket(AF_INET, SOCK_DGRAM, 0);
+
+#ifdef VI_VALIDATE
+            if (this->s == INVALID_SOCKET)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+            }
+#endif
+
+            this->address.sin_port = htons(port);
+            this->address.sin_family = AF_INET;
+            this->address.sin_addr.s_addr = htonl(INADDR_ANY);
+            result = bind(this->s, (sockaddr*)&this->address, (int)sizeof(sockaddr));
+
+#ifdef VI_VALIDATE
+            if (result == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+            }
+#endif        
+
+            // set non blocking
+            ULONG mode = 1;
+            result = ioctlsocket(this->s, FIONBIO, &mode);
+#ifdef VI_VALIDATE
+            if (result == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+            }
+#endif
+        }
+
+        void send(const byte* data, uint len, endpoint* ep)
+        {
+            int result = sendto(this->s, (const char*)data, len, 0, (const sockaddr*)&ep->address, (int)sizeof(sockaddr));
+#ifdef VI_VALIDATE
+            if (result == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+            }
+#endif
+        }
+
+        /// <summary>
+        /// Returns true if message received. False otherwise.
+        /// It's false if function was called but there was nothing to receive.
+        /// </summary>
+        bool receive(byte* data, uint limit, endpoint* ep)
+        {
+            sockaddr_in address;
+            int len = sizeof(sockaddr_in);
+            int result = recvfrom(this->s, (char*)data, limit, 0, (sockaddr*)&address, &len);
+#ifdef VI_VALIDATE
+            if (result == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+                exit(0);
+            }
+#endif
+            memcpy(&ep->address, &address, sizeof(sockaddr_in));
+            ep->isConnected = true;
+            return ep->isConnected;
+        }
+	};
+
+    struct client
+    {
+        SOCKET s;
+        sockaddr_in serverAddress;
+        unsigned short serverPort;
+        uint id;
+    };	
+
+    void initClient(client* c, const char* address, uint port)
+    {
+        vi::util::zero<client>(c);
+        c->serverPort = port;
+        c->id = uid++;
+        c->s = ::socket(AF_INET, SOCK_DGRAM, 0);
+#ifdef VI_VALIDATE
+        if (c->s == INVALID_SOCKET)
+        {
+            _getLastWinsockErrorMessage(WSAGetLastError());
+            fprintf(stderr, lastWinsockError);
+            return;
+        }
+#endif
+        c->serverAddress.sin_port = htons(port);
+        c->serverAddress.sin_family = AF_INET;
+        inet_pton(AF_INET, address, &c->serverAddress.sin_addr);
+        // connect is done so you dont have to pass address in sendto and recvfrom
+        // client communicates with only one address
+        int res = connect(c->s, (sockaddr*)&c->serverAddress, sizeof(sockaddr));
+#ifdef VI_VALIDATE
+        if (res == SOCKET_ERROR)
+        {
+            _getLastWinsockErrorMessage(WSAGetLastError());
+            fprintf(stderr, lastWinsockError);
+            return;
+        }
+#endif
+
+        // set non blocking
+        ULONG mode = 1;
+        res = ioctlsocket(c->s, FIONBIO, &mode);
+#ifdef VI_VALIDATE
+        if (res == SOCKET_ERROR)
+        {
+            _getLastWinsockErrorMessage(WSAGetLastError());
+            fprintf(stderr, lastWinsockError);
+        }
+#endif
+    }
+
+    void send(client* c, byte* data, uint len)
+    {
+        int result = ::send(c->s, (const char*)data, len, 0);
+#ifdef VI_VALIDATE
+        if (result == SOCKET_ERROR)
+        {
+            _getLastWinsockErrorMessage(WSAGetLastError());
+            fprintf(stderr, lastWinsockError);
+            exit(0);
+        }
+#endif
+    }
+
+    
+
+    
+
+    void receive(client* c, byte* data, uint limit)
+    {
+        int len = sizeof(sockaddr_in);
+        int result = recv(c->s, (char*)data, limit, 0);
+#ifdef VI_VALIDATE
+        if (result == SOCKET_ERROR)
+        {
+            _getLastWinsockErrorMessage(WSAGetLastError());
+            fprintf(stderr, lastWinsockError);
+            exit(0);
+        }
+#endif
+    }
+
+    void getAddress(endpoint* ep, char* dst, uint maxSize)
+    {
+        inet_ntop(AF_INET, &ep->address.sin_addr, dst, maxSize);
+    }
+
+    bool compareEndpoints(const endpoint* a, const endpoint* b)
+    {
+        return memcmp(&a->address, &b->address, 8) == 0;
+    }
+
+    void destroyServer(server* s)
+    {
+    }
+
+    void destroyClient(client* c)
+    {
+    }
 }
 
 namespace vi::fn
@@ -2763,99 +3011,101 @@ namespace vi::fn
         uint capacity;
         uint size;
         uint idNext;
+
+        void init(memory::heap* h, time::timer* t, uint capacity)
+        {
+            this->h = h;
+            this->t = t;
+            this->routines = h->alloc<routine>(capacity);
+            this->capacity = capacity;
+            this->size = 0;
+            this->idNext = 0;
+        }
+
+        // duration == 0 means run forever
+        uint initRoutine(std::function<int()> fn, float timeout, float interval, float duration)
+        {
+            routine* r = this->routines + this->size;
+            this->size++;
+            util::zero<routine>(r);
+            r->duration = duration;
+            r->fn = fn;
+            r->interval = interval;
+            r->started = this->t->getGameTimeSec();
+            r->lastUpdate = this->t->getGameTimeSec();
+            r->timeout = timeout;
+            r->id = this->idNext;
+            this->idNext++;
+
+            return r->id;
+        }
+
+        void destroyRoutine(uint id)
+        {
+            for (uint i = 0; i < this->size; i++)
+            {
+                if (this->routines[i].id == id)
+                {
+                    this->routines[i].destroy = true;
+                    return;
+                }
+            }
+        }
+
+        uint setTimeout(std::function<int()> fn, float timeout)
+        {
+            return this->initRoutine(fn, timeout, 0, 0);
+        }
+
+        uint setInterval(std::function<int()> fn, float interval)
+        {
+            return this->initRoutine(fn, 0, interval, 0);
+        }
+
+        // duration == 0 means run forever
+        uint setDuration(std::function<int()> fn, float duration)
+        {
+            return this->initRoutine(fn, 0, 0, duration);
+        }
+
+        void destroy()
+        {
+            this->h->free(this->routines);
+            this->h = nullptr;
+            this->routines = nullptr;
+        }
+
+        void update()
+        {
+            float gameTime = this->t->getGameTimeSec();
+
+            for (int i = this->size - 1; i >= 0; i--)
+            {
+                routine* r = this->routines + i;
+
+                // marked for removal or duration expired
+                if (r->destroy || r->duration != 0 && gameTime - r->started > r->duration)
+                {
+                    // move last last one (which is still active) unless this is the last one
+                    if (i < this->size - 1)
+                        memcpy(r, this->routines + (this->size - 1), sizeof(routine));
+
+                    this->size--;
+                    continue;
+                }
+
+                // check if timeout and interval elapsed
+                if (gameTime - r->started > r->timeout && gameTime - r->lastUpdate > r->interval)
+                {
+                    int val = r->fn();
+                    r->lastUpdate = gameTime;
+
+                    if (val == 0)
+                        r->destroy = true;
+                }
+            }
+        }
     };
-
-    void initQueue(queue* q, memory::heap* h, time::timer* t, uint capacity)
-    {
-        q->h = h;
-		q->t = t;
-        q->routines = memory::heapAlloc<routine>(h, capacity);
-        q->capacity = capacity;
-        q->size = 0;
-        q->idNext = 0;
-    }
-
-    // duration == 0 means run forever
-    uint initRoutine(queue* q, std::function<int()> fn, float timeout, float interval, float duration)
-    {
-        routine* r = q->routines + q->size;
-        q->size++;
-        util::zero<routine>(r);
-        r->duration = duration;
-        r->fn = fn;
-        r->interval = interval;
-        r->started = time::getGameTimeSec(q->t);
-        r->lastUpdate = time::getGameTimeSec(q->t);
-        r->timeout = timeout;
-        r->id = q->idNext;
-        q->idNext++;
-
-        return r->id;
-    }
-
-    void destroyRoutine(queue* q, uint id)
-    {
-        for (uint i = 0; i < q->size; i++)
-        {
-            if (q->routines[i].id == id)
-            {
-                q->routines[i].destroy = true;
-                return;
-            }
-        }
-    }
-
-    uint setTimeout(queue* q, std::function<int()> fn, float timeout)
-    {
-        return initRoutine(q, fn, timeout, 0, 0);
-    }
-
-    uint setInterval(queue* q, std::function<int()> fn, float interval)
-    {
-        return initRoutine(q, fn, 0, interval, 0);
-    }
-
-    // duration == 0 means run forever
-    uint setDuration(queue* q, std::function<int()> fn, float duration)
-    {
-        return initRoutine(q, fn, 0, 0, duration);
-    }
-
-    void destroyQueue(queue* q)
-    {
-        memory::heapFree(q->h, q->routines);
-    }
-
-    void updateQueue(queue* q)
-    {
-        float gameTime = time::getGameTimeSec(q->t);
-
-        for (int i = q->size - 1; i >= 0; i--)
-        {
-            routine* r = q->routines + i;
-
-            // marked for removal or duration expired
-            if (r->destroy || r->duration != 0 && gameTime - r->started > r->duration)
-            {
-                // swap with the last one (which is still active) unless this is the last one
-                if (i < q->size - 1)
-                    util::swap(*r, q->routines[q->size - 1]);
-
-                q->size--;
-                continue;
-            }
-
-            // check if timeout and interval elapsed
-            if (gameTime - r->started > r->timeout && gameTime - r->lastUpdate > r->interval)
-            {
-                int val = r->fn();
-                r->lastUpdate = gameTime;
-
-                if (val == 0)
-                    r->destroy = true;
-            }
-        }
-    }
 }
 
 namespace vi
@@ -2866,7 +3116,6 @@ namespace vi
         uint height;
         const char* title;
         uint queueCapacity;
-		uint spriteManagerCapacity;
     };
 
     struct viva
@@ -2879,41 +3128,48 @@ namespace vi
         memory::heap heap;
         time::timer timer;
         fn::queue queue;
-		graphics::spriteManager spriteManager;
+
+        void init(vivaInfo* info)
+        {
+            system::windowInfo wInfo;
+            wInfo.width = info->width;
+            wInfo.height = info->height;
+            wInfo.title = info->title;
+
+            graphics::rendererInfo rInfo;
+            rInfo.clearColor[0] = 1;
+            rInfo.clearColor[1] = 1;
+            rInfo.clearColor[2] = 1;
+            rInfo.clearColor[3] = 1;
+            rInfo.wnd = &this->window;
+
+            system::initWindow(&wInfo, &this->window);
+            this->keyboard.init();
+            this->mouse.init();
+            this->heap.init();
+            graphics::graphicsInit(&rInfo, &this->graphics);
+            graphics::initCamera(&this->graphics, &this->camera);
+            this->timer.init();
+
+            // if queue capacity is not set then set it to 1
+            if (info->queueCapacity == 0)
+                info->queueCapacity = 1;
+
+            this->queue.init(&this->heap, &this->timer, info->queueCapacity);
+        }
+
+        void destroy()
+        {
+            this->queue.destroy();
+            this->heap.clear();
+            graphics::destroyGraphics(&this->graphics);
+            system::destroyWindow(&this->window);
+        }
     };
-
-    void initViva(viva* v, vivaInfo* info)
-    {
-        system::windowInfo wInfo;
-        wInfo.width = info->width;
-        wInfo.height = info->height;
-        wInfo.title = info->title;
-
-        graphics::rendererInfo rInfo;
-        rInfo.wnd = &v->window;
-
-        system::initWindow(&wInfo, &v->window);
-        input::initKeyboard(&v->keyboard);
-        input::initMouse(&v->mouse);
-        memory::initHeap(&v->heap);
-        graphics::graphicsInit(&rInfo, &v->graphics);
-        graphics::initCamera(&v->graphics, &v->camera);
-        time::initTimer(&v->timer);
-        fn::initQueue(&v->queue, &v->heap, &v->timer, info->queueCapacity);
-
-		if (info->spriteManagerCapacity > 0)
-		{
-			graphics::initSpriteManager(&v->spriteManager, &v->heap,
-				info->spriteManagerCapacity);
-		}
-    }
 }
 
 #endif
 
 #ifndef VIVA_IMPL
-namespace vi::memory
-{
-
-}
+// here should be prototypes and declarations only for compiler
 #endif

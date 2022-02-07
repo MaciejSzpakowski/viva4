@@ -34,7 +34,7 @@ struct camera
 
 layout(binding = 0) uniform UniformBufferObject {
 	camera cam;
-    transform t[10000];
+    transform t[1000];
 } ubo;
 
 // first column is POS, second is UV
