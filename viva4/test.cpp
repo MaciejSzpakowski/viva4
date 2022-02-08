@@ -101,7 +101,8 @@ namespace examples
         vi::util::stream<100> stream;
         vi::net::endpoint currentEp;
         vi::net::initNetwork();
-        vi::net::server server(10000);
+        vi::net::server server;
+        server.init(10000);
         vi::time::timer timer;
         timer.init();
         uint id = 1;
@@ -156,22 +157,32 @@ namespace examples
         }
     }
 
-    void appendline(const char* src, char* dst)
+    void appendline(const char* src, char* dst, uint maxlen)
     {
         uint lensrc = strlen(src);
         uint lendst = strlen(dst);
-        // limit to linelen
-        if (lensrc > 30) lensrc = 30;
-        if (lendst > 30 * 20)
+        uint newlines = 0;
+        for (uint i = 0; i < lendst; i++)
         {
-            memcpy(dst, dst + 30, lendst - 30);
+            if (dst[i] == '\n') newlines++;
         }
+        if (lendst + lensrc >= maxlen || newlines > 20)
+        {
+            const char* newline = strstr(dst, "\n");
+            memcpy(dst, newline + 1, newline - dst);
+            lendst = strlen(dst);
+        }
+        memcpy(dst + lendst, src, lensrc + 1);
     }
 
     void chatClient()
     {
         gameData data;
-        const uint LINE = 57;
+        char text[1000];
+        char buffer[100];
+        memset(text, 0, 1000);
+        memset(buffer, 0, 100);
+
         auto loop = [&](uint i)
         {
             vi::graphics::drawScene(&data.v.graphics, data.sprites, 1000, &data.v.camera);
@@ -186,19 +197,23 @@ namespace examples
         vi::graphics::createTextureFromFile(&data.v.graphics, "textures/font1.png", data.tex);
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
 
-        char text[1000];
         const char* initMsg = "Type ip and port and then press enter to connect to chat \nserver. Ex. 1.1.1.1:10000";
         memcpy(text, initMsg, strlen(initMsg) + 1);
         vi::graphics::font font1(data.tex);
         vi::graphics::uvSplitInfo usi = { 256,36,0,0,8,12,32,96 };
         vi::graphics::uvSplit(&usi, font1.uv);
 
-        vi::graphics::text text1 = { &font1, data.sprites, initMsg, 0, 0 };
+        data.t[0] = { &font1, data.sprites, initMsg, 0, 0 };
         vi::graphics::setScreenPos(&data.v.graphics, &data.v.camera, 20, 20, 
             &data.sprites[0].s1.x, &data.sprites[0].s1.y);
         vi::graphics::setPixelScale(&data.v.graphics, &data.v.camera, 16, 24,
             &data.sprites[0].s1.sx, &data.sprites[0].s1.sy);
-        text1.update();
+        data.t[0].update();
+        data.t[1] = { &font1, data.sprites + 600, buffer, 0, 0 };
+        vi::graphics::setScreenPos(&data.v.graphics, &data.v.camera, 20, 940,
+            &data.t[1].s[0].s1.x, &data.t[1].s[0].s1.y);
+        vi::graphics::setPixelScale(&data.v.graphics, &data.v.camera, 16, 24,
+            &data.t[1].s[0].s1.sx, &data.t[1].s[0].s1.sy);
         for (uint i = 0; i < SPRITE_COUNT; i++) data.sprites[i].s2.col = { 0,0,0 };
 
         vi::system::loop<uint>(loop, 0);
@@ -214,12 +229,13 @@ namespace examples
 
         // init network in windows
         vi::net::initNetwork();
-        vi::net::server server(10000);
+        vi::net::server server;
         // start server at port 10000
+        server.init(10000);
         // start client and point it at localhost:10000
-        vi::net::initClient(&client, "127.0.0.1", 10000);
+        client.init("127.0.0.1", 10000);
         // client sends to server
-        vi::net::send(&client, (byte*)"Hello", 6);
+        client.send((byte*)"Hello", 6);
         byte data[20];
         // server receives
         // since this is not blocking it might fail if send is not fast enough
@@ -228,18 +244,18 @@ namespace examples
         char clientip[20];
         memset(clientip, 0, 20);
         // server determines ip of client
-        vi::net::getAddress(&serverSide, clientip, 20);
+        serverSide.getAddress(clientip, 20);
         printf("server side, %s said: %s\n", clientip, data);
         // server sends to client
         server.send((const byte*)"Hi", 3, &serverSide);
         // client receives
         // since this is not blocking it might fail if send is not fast enough
         // but I guess it is in localhost
-        vi::net::receive(&client, data, 20);
+        client.receive(data, 20);
         printf("client side, server said: %s\n", data);
         // release resources
-        vi::net::destroyClient(&client);
-        vi::net::destroyServer(&server);
+        client.destroyClient();
+        server.destroyServer();
         // uninit network in windows
         vi::net::uninitNetwork();
     }
@@ -491,22 +507,87 @@ namespace examples
         data.v.destroy();
     }
 
-    // display array of bits, 0 if key is up and 1 if key is down
-    void inputState()
+    /// <summary>
+    /// Typing test
+    /// </summary>
+    void typing()
     {
         gameData data;
         char str[1000];
+        memset(str, 0, 1000);
+        sprintf(str, "Type something_");
+        uint len = strlen(str) - 1;
+
         auto loop = [&](uint i)
         {
             data.v.keyboard.update();
 
-            memset(str, 0, 1000);
+            if (data.v.keyboard.isKeyPressed(vi::input::BACKSPACE) && len > 0)
+            {
+                str[--len] = 0;
+                strcat(str, "_");
+                data.t[0].update();
+            }
+            else if (data.v.keyboard.isKeyPressed(vi::input::ENTER) && len < 900)
+            {
+                str[len++] = '\n';
+                strcat(str, "_");
+                data.t[0].update();
+            }
+            else if (data.v.keyboard.typedKey != 0 && len < 900 &&
+                data.v.keyboard.typedKey != '\t' /* there is no glyph for tab */)
+            {
+                str[len++] = data.v.keyboard.typedKey;
+                strcat(str, "_");
+                data.t[0].update();
+            }
+
+            vi::graphics::drawScene(&data.v.graphics, data.sprites, 256, &data.v.camera);
+        };
+
+        vi::vivaInfo info;
+        info.width = 1200;
+        info.height = 540;
+        info.title = "Typing";
+        data.v.init(&info);
+
+        vi::graphics::createTextureFromFile(&data.v.graphics, "textures/font1.png", data.tex);
+        vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
+
+        vi::graphics::font font1 = { data.tex };
+        vi::graphics::uvSplitInfo usi = { 256,36,0,0,8,12,32,96 };
+        vi::graphics::uvSplit(&usi, font1.uv);
+
+        data.t[0] = { &font1, data.sprites, str, 0, 0 };
+        data.sprites[0].s2.pos = { -1, -0.75f };
+        vi::graphics::setPixelScale(&data.v.graphics, &data.v.camera, 16, 24,
+            &data.sprites[0].s1.sx, &data.sprites[0].s1.sy);
+        vi::graphics::setScreenPos(&data.v.graphics, &data.v.camera, 20, 20,
+            &data.sprites[0].s1.x, &data.sprites[0].s1.y);
+        data.t[0].update();
+
+        vi::system::loop<uint>(loop, 0);
+
+        vi::graphics::destroyTexture(&data.v.graphics, data.tex);
+        data.v.destroy();
+    }
+
+    // display virtual key codes of keys that are down
+    // some keys cause more than one code to be true (like shift,ctrl and alt)
+    void inputState()
+    {
+        gameData data;
+        char str[1000];
+
+        auto loop = [&](uint i)
+        {
+            data.v.keyboard.update();
+
+            sprintf(str, "Press key(s) to show codes\n");
             for (int i = 0, c = 0; c < 256; c++)
             {
-                if (c > 0 && c % 16 == 0)
-                    str[i++] = '\n';
-
-                str[i++] = data.v.keyboard.isKeyDown(c) ? '1' : '0';
+                if (data.v.keyboard.isKeyDown(c))
+                    sprintf(str + strlen(str), "%d ", c);
             }
 
             data.t[0].update();
@@ -515,7 +596,7 @@ namespace examples
         };
 
         vi::vivaInfo info;
-        info.width = 960;
+        info.width = 1200;
         info.height = 540;
         info.title = "Input state";
         data.v.init(&info);
@@ -531,10 +612,9 @@ namespace examples
         data.sprites[0].s2.pos = { -1, -0.75f };
         vi::graphics::setPixelScale(&data.v.graphics, &data.v.camera, 16, 24,
             &data.sprites[0].s1.sx, &data.sprites[0].s1.sy);
-
-        // set color of all sprites to black
-        for (uint i = 0; i < 1000; i++)
-            data.sprites[i].s2.col = { 0,0,0 };
+        vi::graphics::setScreenPos(&data.v.graphics, &data.v.camera, 20, 20, 
+            &data.sprites[0].s1.x, &data.sprites[0].s1.y);
+        data.t[0].update();
 
         vi::system::loop<uint>(loop, 0);
 
@@ -547,6 +627,9 @@ namespace examples
         gameData data;
         bool flag = false;
         char str[300];
+        const char* cstr = "Some text that\ncontains new line characters.\nEach glyph is just a sprite and\n"
+            "can be manipulated individually.\nPress space to toggle";
+        const char* extra = "\n more stuff";
         auto loop = [&](uint i)
         {
             vi::graphics::drawScene(&data.v.graphics, data.sprites, 1000, &data.v.camera);
@@ -554,10 +637,16 @@ namespace examples
             if (data.v.keyboard.isKeyPressed(vi::input::SPACE) && !flag)
             {
                 flag = true;
+                uint len = strlen(str);
+                memcpy(str + len, extra, strlen(extra));
+                data.t[0].update();
+
             }
             else if(data.v.keyboard.isKeyPressed(vi::input::SPACE) && flag)
             {
                 flag = false;
+                str[strlen(cstr)] = 0;
+                data.t[0].update();
             }
         };
 
@@ -569,9 +658,7 @@ namespace examples
 
         vi::graphics::createTextureFromFile(&data.v.graphics, "textures/font1.png", data.tex);
         vi::graphics::pushTextures(&data.v.graphics, data.tex, 1);
-
-        const char* cstr = "Some text that\ncontains new line characters.\nEach glyph is just a sprite and\n"
-            "can be manipulated individually.";
+                
         memcpy(str, cstr, strlen(cstr) + 1);
         // font is a simple object that combines texture and uv for glyphs together
         vi::graphics::font font1(data.tex);
@@ -581,13 +668,13 @@ namespace examples
         // INIT TEXT
         // set position, scale, origin of the first sprite and others will have
         // the same scale and origin and will be advanced starting from that first one's position
-        vi::graphics::text text1 = { &font1, data.sprites, str, 0, 0 };
+        data.t[0] = { &font1, data.sprites, str, 0, 0 };
         data.sprites[0].s2.pos = { -1, -0.5f };
         vi::graphics::setPixelScale(&data.v.graphics, &data.v.camera, 16, 24, 
             &data.sprites[0].s1.sx, &data.sprites[0].s1.sy);
 
         // 'updateText(text*)' is really util function to set sprites to look like text
-        text1.update();
+        data.t[0].update();
 
         // set all glyphs to be black
         // texture is white so col can be used directly to set text color
@@ -600,8 +687,7 @@ namespace examples
         // subtract 3 because new line characters dont have corresponding sprites
         uint index = ptr - str - 3;
         uint len2 = strlen("individually");
-        for (uint i = index; i < index + len2; i++)
-            data.sprites[i].s2.col = { 1,0,0 };
+        for (uint i = index; i < index + len2; i++) data.sprites[i].s2.col = { 1,0,0 };
         
         vi::system::loop<uint>(loop, 0);
 
@@ -1111,20 +1197,21 @@ namespace examples
 
     int main()
     {
-        chatClient();
+        //chatClient();
 
-        basicSprite();
+        /*basicSprite();
         moreSprites();
         timerMotionAnimation();
         keyboardMultipleAnimationsMath();
         multipleTextures();
         camera();
-        text();
-        inputState();
-        mouseAndFixedSprite();
+        text();*/
+        //inputState();
+        typing();
+        /*mouseAndFixedSprite();
         zindex();
         queue();
-        network();
+        network();*/
 
         return 0;
     }

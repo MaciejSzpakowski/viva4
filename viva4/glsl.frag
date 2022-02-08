@@ -12,7 +12,11 @@ layout(binding = 1) uniform sampler texSampler;
 layout(binding = 2) uniform texture2D sampledImage[256];
 
 void main() {
-	if(textureIndex >= 0)
+	if(textureIndex == 999999)
+	{
+		discard;
+	}
+	else if(textureIndex >= 0)
 	{
 		vec4 mask = vec4(fragColor,1);
 		outColor = texture(sampler2D(sampledImage[textureIndex],texSampler), fragTexCoord);

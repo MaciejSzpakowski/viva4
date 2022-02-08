@@ -51,6 +51,7 @@ layout(location = 2) out flat int textureIndex;
 
 void main() {
 	transform t = ubo.t[gl_InstanceIndex];
+	
 	vec2 uv[4] = vec2[](vec2(t.left, t.top),vec2(t.left, t.bottom),vec2(t.right, t.top),vec2(t.right, t.bottom));
 	// camera
     // that is correct camera transformation

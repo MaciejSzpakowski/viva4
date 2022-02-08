@@ -590,6 +590,7 @@ namespace vi::graphics
     const uint _UNIFORM_BUFFER_SIZE = 1024 * 1024;
     const uint _INDIRECT_BUFFER_SIZE = sizeof(VkDrawIndirectCommand);
     const uint TEXTURE_COUNT = 256;
+    const uint TEXTURE_INVISIBLE = 999999;
 
     struct camera
     {
@@ -840,7 +841,7 @@ namespace vi::graphics
             // zero them out
             if (this->last != nullptr)
             {
-                for (; s < this->last; s++) s->s1.textureIndex = 0;
+                for (; s < this->last; s++) s->s1.textureIndex = TEXTURE_INVISIBLE;
             }
             this->last = s;
         }
@@ -2628,26 +2629,59 @@ namespace vi::input
     {
         bool buf1[KEYBOARD_KEY_COUNT];
         bool buf2[KEYBOARD_KEY_COUNT];
+        char typemaplower[KEYBOARD_KEY_COUNT];
+        char typemapupper[KEYBOARD_KEY_COUNT];
         bool* curState;
         bool* prevState;
+        char typedKey;
 
         void init()
         {
+            this->typedKey = 0;
             this->curState = this->buf1;
             this->prevState = this->buf2;
             memset(this->buf1, 0, KEYBOARD_KEY_COUNT);
             memset(this->buf2, 0, KEYBOARD_KEY_COUNT);
+            memset(this->typemaplower, 0, KEYBOARD_KEY_COUNT);
+            memset(this->typemapupper, 0, KEYBOARD_KEY_COUNT);
+
+            this->typemaplower[9] = '\t';
+            this->typemaplower[32] = ' ';
+            memcpy(this->typemaplower + 48, "0123456789", 10);
+            memcpy(this->typemaplower + 65, "abcdefghijklmnopqrstuvwxyz", 26);
+            memcpy(this->typemaplower + 186, ";=,-./`", 7);
+            memcpy(this->typemaplower + 219, "[\\]'", 4);
+            memcpy(this->typemaplower + 96, "0123456789*+'", 13);
+            this->typemaplower[109] = '-';
+            this->typemaplower[111] = '/';
+
+            this->typemapupper[9] = '\t';
+            this->typemapupper[32] = ' ';
+            memcpy(this->typemapupper + 48, ")!@#$%^&*(", 10);
+            memcpy(this->typemapupper + 65, "ABCDEFGHIJKLMNOPQRSTUVWXYZ", 26);
+            memcpy(this->typemapupper + 186, ":+<_>?~", 7);
+            memcpy(this->typemapupper + 219, "{|}\"", 4);
+            memcpy(this->typemapupper + 96, "0123456789*+'", 13);
+            this->typemapupper[109] = '-';
+            this->typemapupper[111] = '/';
         }
 
         void update()
         {
+            this->typedKey = 0;
             // swap states
             vi::util::swap(this->curState, this->prevState);
 
+            // get shift first
+            bool isUpper = (::GetAsyncKeyState(16) & 0x8000) && true;
             // get button states
             for (int i = 0; i < KEYBOARD_KEY_COUNT; i++)
             {
                 this->curState[i] = (::GetAsyncKeyState(i) & 0x8000) && true;
+                if (this->typemapupper[i] != 0 && !this->prevState[i] && this->curState[i] && isUpper)
+                    this->typedKey = this->typemapupper[i];
+                else if (this->typemaplower[i] != 0 && !this->prevState[i] && this->curState[i] && !isUpper)
+                    this->typedKey = this->typemaplower[i];
             }
         }
 
@@ -2666,6 +2700,11 @@ namespace vi::input
         bool isKeyReleased(int _key)
         {
             return !this->curState[_key] && this->prevState[_key];
+        }
+
+        char getKeyTyped()
+        {
+
         }
     };
 
@@ -2799,12 +2838,11 @@ namespace vi::net
         sockaddr_in address;
         float lastMessage;
         bool isConnected;
-    };
 
-    struct serverMsg
-    {
-        endpoint* ep;
-
+        void getAddress(char* dst, uint maxSize)
+        {
+            inet_ntop(AF_INET, &this->address.sin_addr, dst, maxSize);
+        }
     };
 
 	struct server
@@ -2814,7 +2852,7 @@ namespace vi::net
 		unsigned short port;
 		uint id;
 
-        server(ushort port)
+        void init(ushort port)
         {
             int result = 0;
 
@@ -2827,6 +2865,7 @@ namespace vi::net
             {
                 _getLastWinsockErrorMessage(WSAGetLastError());
                 fprintf(stderr, lastWinsockError);
+                return;
             }
 #endif
 
@@ -2840,6 +2879,7 @@ namespace vi::net
             {
                 _getLastWinsockErrorMessage(WSAGetLastError());
                 fprintf(stderr, lastWinsockError);
+                return;
             }
 #endif        
 
@@ -2851,6 +2891,7 @@ namespace vi::net
             {
                 _getLastWinsockErrorMessage(WSAGetLastError());
                 fprintf(stderr, lastWinsockError);
+                return;
             }
 #endif
         }
@@ -2888,6 +2929,10 @@ namespace vi::net
             ep->isConnected = true;
             return ep->isConnected;
         }
+
+        void destroyServer()
+        {
+        }
 	};
 
     struct client
@@ -2896,97 +2941,84 @@ namespace vi::net
         sockaddr_in serverAddress;
         unsigned short serverPort;
         uint id;
-    };	
 
-    void initClient(client* c, const char* address, uint port)
-    {
-        vi::util::zero<client>(c);
-        c->serverPort = port;
-        c->id = uid++;
-        c->s = ::socket(AF_INET, SOCK_DGRAM, 0);
-#ifdef VI_VALIDATE
-        if (c->s == INVALID_SOCKET)
+        void init(const char* address, uint port)
         {
-            _getLastWinsockErrorMessage(WSAGetLastError());
-            fprintf(stderr, lastWinsockError);
-            return;
-        }
-#endif
-        c->serverAddress.sin_port = htons(port);
-        c->serverAddress.sin_family = AF_INET;
-        inet_pton(AF_INET, address, &c->serverAddress.sin_addr);
-        // connect is done so you dont have to pass address in sendto and recvfrom
-        // client communicates with only one address
-        int res = connect(c->s, (sockaddr*)&c->serverAddress, sizeof(sockaddr));
+            vi::util::zero<client>(this);
+            this->serverPort = port;
+            this->id = uid++;
+            this->s = ::socket(AF_INET, SOCK_DGRAM, 0);
 #ifdef VI_VALIDATE
-        if (res == SOCKET_ERROR)
-        {
-            _getLastWinsockErrorMessage(WSAGetLastError());
-            fprintf(stderr, lastWinsockError);
-            return;
-        }
+            if (this->s == INVALID_SOCKET)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+                return;
+            }
 #endif
-
-        // set non blocking
-        ULONG mode = 1;
-        res = ioctlsocket(c->s, FIONBIO, &mode);
+            this->serverAddress.sin_port = htons(port);
+            this->serverAddress.sin_family = AF_INET;
+            inet_pton(AF_INET, address, &this->serverAddress.sin_addr);
+            // connect is done so you dont have to pass address in sendto and recvfrom
+            // client communicates with only one address
+            int res = connect(this->s, (sockaddr*)&this->serverAddress, sizeof(sockaddr));
 #ifdef VI_VALIDATE
-        if (res == SOCKET_ERROR)
-        {
-            _getLastWinsockErrorMessage(WSAGetLastError());
-            fprintf(stderr, lastWinsockError);
-        }
+            if (res == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+                return;
+            }
 #endif
-    }
 
-    void send(client* c, byte* data, uint len)
-    {
-        int result = ::send(c->s, (const char*)data, len, 0);
+            // set non blocking
+            ULONG mode = 1;
+            res = ioctlsocket(this->s, FIONBIO, &mode);
 #ifdef VI_VALIDATE
-        if (result == SOCKET_ERROR)
-        {
-            _getLastWinsockErrorMessage(WSAGetLastError());
-            fprintf(stderr, lastWinsockError);
-            exit(0);
-        }
+            if (res == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+            }
 #endif
-    }
+        }
 
-    
-
-    
-
-    void receive(client* c, byte* data, uint limit)
-    {
-        int len = sizeof(sockaddr_in);
-        int result = recv(c->s, (char*)data, limit, 0);
+        void send(byte* data, uint len)
+        {
+            int result = ::send(this->s, (const char*)data, len, 0);
 #ifdef VI_VALIDATE
-        if (result == SOCKET_ERROR)
-        {
-            _getLastWinsockErrorMessage(WSAGetLastError());
-            fprintf(stderr, lastWinsockError);
-            exit(0);
-        }
+            if (result == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+                exit(0);
+            }
 #endif
-    }
+        }
 
-    void getAddress(endpoint* ep, char* dst, uint maxSize)
-    {
-        inet_ntop(AF_INET, &ep->address.sin_addr, dst, maxSize);
-    }
+        void receive(byte* data, uint limit)
+        {
+            int len = sizeof(sockaddr_in);
+            int result = recv(this->s, (char*)data, limit, 0);
+#ifdef VI_VALIDATE
+            if (result == SOCKET_ERROR)
+            {
+                _getLastWinsockErrorMessage(WSAGetLastError());
+                fprintf(stderr, lastWinsockError);
+                exit(0);
+            }
+#endif
+        }
+
+        void destroyClient()
+        {
+        }
+    };    
 
     bool compareEndpoints(const endpoint* a, const endpoint* b)
     {
         return memcmp(&a->address, &b->address, 8) == 0;
-    }
-
-    void destroyServer(server* s)
-    {
-    }
-
-    void destroyClient(client* c)
-    {
-    }
+    }    
 }
 
 namespace vi::fn
